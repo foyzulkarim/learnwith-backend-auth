@@ -26,18 +26,16 @@ export class AuthController {
 
       fastify.log.info('Received Google access token.');
 
-      // 2. Fetch user profile from Google using the access token
-      // The plugin often provides a helper for this
-      const userProfile = await fastify.googleOAuth2.userinfo(
-        tokenData.token.access_token // Access the token property which contains access_token
-        // { // Optional parameters if needed by the userinfo endpoint
-        //   params: { fields: 'id,email,name,picture' }
-        // }
-      );
-      // userProfile structure depends on Google API response and requested scopes
-
+      // 2. Fetch user profile from Google using the token access_token
+      const accessToken = tokenData.token.access_token;
+      const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      });
+      
+      const userProfile = await userInfo.json();
       fastify.log.info({ googleProfile: userProfile }, 'Fetched Google user profile.');
-
 
       // 3. Process login (find/create user, generate JWT) using the AuthService
       const jwtToken = await this.authService.processGoogleLogin(userProfile);

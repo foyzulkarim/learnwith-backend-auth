@@ -4,19 +4,22 @@ import { PrismaClient } from '@prisma/client';
 import { User } from './types'; // Import User from our types file
 
 // Define the structure of the Google profile data we expect
+// This matches the OpenID Connect format that Google returns
 interface GoogleUserProfile {
-  id: string; // Google's unique user ID
-  displayName?: string; // User's display name
-  name?: {
-    // Name components
-    familyName?: string;
-    givenName?: string;
-  };
-  emails?: Array<{ value: string; verified?: boolean }>; // User's email addresses
-  photos?: Array<{ value: string }>; // User's profile picture URLs
-  provider: string; // Should be 'google'
-  // _raw: string;       // Raw JSON response
-  // _json: any;       // Parsed JSON response
+  sub?: string;      // OpenID Connect standard - Google's unique user ID  
+  id?: string;       // Alternative ID field (for backward compatibility)
+  name?: string;     // User's full name
+  given_name?: string; // User's first name
+  family_name?: string; // User's last name
+  email?: string;    // User's email address
+  email_verified?: boolean; // Whether email is verified
+  picture?: string;  // URL to user's profile picture
+  
+  // Legacy format support (for backward compatibility)
+  displayName?: string;
+  emails?: Array<{ value: string; verified?: boolean }>;
+  photos?: Array<{ value: string }>;
+  provider?: string;
 }
 
 export class UserService {
@@ -31,25 +34,25 @@ export class UserService {
   async findOrCreateUserByGoogleProfile(
     profile: GoogleUserProfile
   ): Promise<User> {
-    if (!profile.id) {
+    // Get the Google ID (sub is the OpenID Connect standard)
+    const googleId = profile.sub || profile.id;
+    if (!googleId) {
       throw new Error('Google profile ID is missing.');
     }
-    if (
-      !profile.emails ||
-      profile.emails.length === 0 ||
-      !profile.emails[0].value
-    ) {
+
+    // Get the email (direct email field or from the emails array)
+    const email = profile.email || 
+      (profile.emails && profile.emails.length > 0 ? profile.emails[0].value : undefined);
+    
+    if (!email) {
       throw new Error('Google profile email is missing.');
     }
 
-    const googleId = profile.id;
-    const email = profile.emails[0].value; // Use the primary email
-    const name =
+    // Get the name
+    const name = profile.name || 
       profile.displayName ||
-      `${profile.name?.givenName || ''} ${
-        profile.name?.familyName || ''
-      }`.trim() ||
-      'User'; // Construct name
+      `${profile.given_name || ''} ${profile.family_name || ''}`.trim() ||
+      'User';
 
     // 1. Try to find user by Google ID
     let user = await this.prisma.user.findUnique({

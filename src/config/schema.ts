@@ -7,7 +7,7 @@ export const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().url(), // Connection string for Prisma (potentially D1 HTTP API endpoint + token)
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
-  FRONTEND_URL: z.string().url().default('http://localhost:5173'), // URL of your frontend app
+  FRONTEND_URL: z.string().url().default('http://localhost:3030'), // URL of your frontend app
 
   // Google OAuth Credentials
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),

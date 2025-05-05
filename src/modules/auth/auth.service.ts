@@ -53,7 +53,16 @@ export class AuthService {
    */
   async processGoogleLogin(googleProfile: any): Promise<string> {
      try {
-        // 2. Find or create user in the database
+        // Log the profile data to help debug
+        this.fastify.log.info({ googleProfile }, 'Processing Google profile');
+        
+        // Check if sub exists in the profile - this is the Google ID
+        if (!googleProfile.sub) {
+           throw new Error('Google profile ID is missing.');
+        }
+        
+        // 2. Find or create user in the database using the original Google profile
+        // The UserService should be able to handle the standard OpenID Connect profile format
         const user = await this.userService.findOrCreateUserByGoogleProfile(googleProfile);
 
         // 3. Prepare JWT payload
