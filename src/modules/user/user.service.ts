@@ -1,20 +1,19 @@
 // src/modules/user/user.service.ts
-import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { User } from './types'; // Import User from our types file
 
 // Define the structure of the Google profile data we expect
 // This matches the OpenID Connect format that Google returns
 export interface GoogleUserProfile {
-  sub?: string;      // OpenID Connect standard - Google's unique user ID  
-  id?: string;       // Alternative ID field (for backward compatibility)
-  name?: string;     // User's full name
+  sub?: string; // OpenID Connect standard - Google's unique user ID
+  id?: string; // Alternative ID field (for backward compatibility)
+  name?: string; // User's full name
   given_name?: string; // User's first name
   family_name?: string; // User's last name
-  email?: string;    // User's email address
+  email?: string; // User's email address
   email_verified?: boolean; // Whether email is verified
-  picture?: string;  // URL to user's profile picture
-  
+  picture?: string; // URL to user's profile picture
+
   // Legacy format support (for backward compatibility)
   displayName?: string;
   emails?: Array<{ value: string; verified?: boolean }>;
@@ -31,9 +30,7 @@ export class UserService {
    * @param profile - User profile information obtained from Google.
    * @returns The found or created User object.
    */
-  async findOrCreateUserByGoogleProfile(
-    profile: GoogleUserProfile
-  ): Promise<User> {
+  async findOrCreateUserByGoogleProfile(profile: GoogleUserProfile): Promise<User> {
     // Get the Google ID (sub is the OpenID Connect standard)
     const googleId = profile.sub || profile.id;
     if (!googleId) {
@@ -41,15 +38,17 @@ export class UserService {
     }
 
     // Get the email (direct email field or from the emails array)
-    const email = profile.email || 
+    const email =
+      profile.email ||
       (profile.emails && profile.emails.length > 0 ? profile.emails[0].value : undefined);
-    
+
     if (!email) {
       throw new Error('Google profile email is missing.');
     }
 
     // Get the name
-    const name = profile.name || 
+    const name =
+      profile.name ||
       profile.displayName ||
       `${profile.given_name || ''} ${profile.family_name || ''}`.trim() ||
       'User';

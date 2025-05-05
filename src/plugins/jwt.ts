@@ -1,6 +1,6 @@
 // src/plugins/jwt.ts
 import fp from 'fastify-plugin';
-import fastifyJwt, { FastifyJWTOptions } from '@fastify/jwt';
+import fastifyJwt from '@fastify/jwt';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config'; // Assuming config is loaded and validated
 
@@ -24,12 +24,11 @@ declare module 'fastify' {
 }
 
 declare module '@fastify/jwt' {
-    interface FastifyJWT {
-        payload: UserJWTPayload // Define payload type
-        user: UserJWTPayload // Define user type
-    }
+  interface FastifyJWT {
+    payload: UserJWTPayload; // Define payload type
+    user: UserJWTPayload; // Define user type
+  }
 }
-
 
 export default fp(async function jwtPlugin(fastify: FastifyInstance) {
   fastify.register(fastifyJwt, {
@@ -54,9 +53,6 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
         fastify.log.error('Authentication error:', err);
         reply.code(401).send({ message: 'Unauthorized: Invalid or missing token' });
       }
-    }
+    },
   );
 });
-
-
-

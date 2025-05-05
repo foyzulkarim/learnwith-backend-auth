@@ -7,7 +7,14 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
-    ignores: ['node_modules/**', 'dist/**'],
+    // Global ignores - applied to all configurations below
+    ignores: [
+      'node_modules/**',
+      'dist/**',
+      'prisma/**'
+    ],
+  },
+  {
     files: ['**/*.ts'],
     languageOptions: {
       parserOptions: {

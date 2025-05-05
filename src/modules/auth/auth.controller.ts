@@ -15,7 +15,10 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   // Handler for the /api/auth/google/callback route
-  async googleCallbackHandler(request: FastifyRequest<{ Querystring: GoogleCallbackQuery }>, reply: FastifyReply) {
+  async googleCallbackHandler(
+    request: FastifyRequest<{ Querystring: GoogleCallbackQuery }>,
+    reply: FastifyReply,
+  ): Promise<void> {
     const fastify = request.server; // Get Fastify instance
 
     try {
@@ -30,10 +33,10 @@ export class AuthController {
       const accessToken = tokenData.token.access_token;
       const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
+          Authorization: `Bearer ${accessToken}`,
+        },
       });
-      
+
       const userProfile = await userInfo.json();
       fastify.log.info({ googleProfile: userProfile }, 'Fetched Google user profile.');
 
@@ -51,13 +54,15 @@ export class AuthController {
       // Redirect user back to the frontend without including the token in the URL
       const redirectUrl = new URL(config.FRONTEND_URL); // Use configured frontend URL
       reply.redirect(redirectUrl.toString());
-
-    } catch (error: any) {
+    } catch (error: unknown) {
       fastify.log.error({ err: error }, 'Google OAuth callback error');
       // Redirect to frontend with error information
       const errorRedirectUrl = new URL(config.FRONTEND_URL);
       errorRedirectUrl.searchParams.set('error', 'google_auth_failed');
-      errorRedirectUrl.searchParams.set('error_description', error.message || 'An unknown error occurred during Google Sign-In.');
+      errorRedirectUrl.searchParams.set(
+        'error_description',
+        error instanceof Error ? error.message : 'An unknown error occurred during Google Sign-In.',
+      );
       reply.redirect(errorRedirectUrl.toString());
     }
   }
