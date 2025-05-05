@@ -1,5 +1,5 @@
 // src/modules/auth/auth.controller.ts
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import { AuthService } from './auth.service';
 import { config } from '../../config'; // Import config for FRONTEND_URL
 
@@ -40,20 +40,16 @@ export class AuthController {
       // 3. Process login (find/create user, generate JWT) using the AuthService
       const jwtToken = await this.authService.processGoogleLogin(userProfile);
 
-      // 4. Redirect user back to the frontend with the JWT
-      // **Security Note:** Passing tokens in URL query parameters is generally
-      // discouraged as they can be logged in server logs, browser history, etc.
-      // Consider alternative methods for production:
-      //    a) Set an HTTP-only cookie containing the JWT.
-      //    b) Redirect to a specific frontend page that then makes a POST request
-      //       to a secure backend endpoint to *retrieve* the token.
-      //    c) Use postMessage API if redirecting within an iframe/popup.
-      // For simplicity in this example, we use a query parameter.
-      const redirectUrl = new URL(config.FRONTEND_URL); // Use configured frontend URL
-      redirectUrl.searchParams.set('token', jwtToken);
-      // Optionally add state parameter back if needed for frontend logic
-      // redirectUrl.searchParams.set('state', request.query.state || '');
+      // 4. Set the JWT token in an HTTP-only cookie
+      reply.setCookie('auth_token', jwtToken, {
+        httpOnly: true, // Prevent access from JavaScript
+        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        sameSite: 'lax', // Prevent CSRF in most cases
+        path: '/', // Cookie is valid for the entire domain
+      });
 
+      // Redirect user back to the frontend without including the token in the URL
+      const redirectUrl = new URL(config.FRONTEND_URL); // Use configured frontend URL
       reply.redirect(redirectUrl.toString());
 
     } catch (error: any) {

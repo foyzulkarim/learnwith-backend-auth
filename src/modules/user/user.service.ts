@@ -5,7 +5,7 @@ import { User } from './types'; // Import User from our types file
 
 // Define the structure of the Google profile data we expect
 // This matches the OpenID Connect format that Google returns
-interface GoogleUserProfile {
+export interface GoogleUserProfile {
   sub?: string;      // OpenID Connect standard - Google's unique user ID  
   id?: string;       // Alternative ID field (for backward compatibility)
   name?: string;     // User's full name
