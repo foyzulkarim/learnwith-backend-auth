@@ -35,7 +35,7 @@ export function buildApp(): FastifyInstance {
   // fastify.register(userRoutes, { prefix: '/api/users' });
 
   // --- Basic Root Route ---
-  fastify.get('/', async (request, reply) => {
+  fastify.get('/', async (_request, _reply) => {
     return { message: 'Authentication Service Running' };
   });
 
@@ -44,12 +44,11 @@ export function buildApp(): FastifyInstance {
     fastify.log.error(error);
     // Customize error response based on error type or environment
     reply.status(error.statusCode || 500).send({
-        message: error.message || 'Internal Server Error',
-        // Avoid sending stack trace in production
-        ...(config.NODE_ENV !== 'production' && { stack: error.stack })
+      message: error.message || 'Internal Server Error',
+      // Avoid sending stack trace in production
+      ...(config.NODE_ENV !== 'production' && { stack: error.stack }),
     });
-});
-
+  });
 
   return fastify;
 }

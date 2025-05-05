@@ -1,23 +1,23 @@
 // src/modules/auth/auth.service.ts
-import { FastifyInstance } from "fastify";
-import { UserService, GoogleUserProfile } from "../user/user.service"; // Import UserService
-import { UserJWTPayload } from "../../plugins/jwt"; // Import JWT payload type
+import { FastifyInstance } from 'fastify';
+import { UserService, GoogleUserProfile } from '../user/user.service'; // Import UserService
+import { UserJWTPayload } from '../../plugins/jwt'; // Import JWT payload type
 
 export class AuthService {
   // Inject dependencies (Fastify instance for JWT signing, UserService)
   constructor(
     private fastify: FastifyInstance,
-    private userService: UserService
+    private userService: UserService,
   ) {}
 
   /**
    * Handles the Google OAuth callback. Finds or creates the user
    * and generates a JWT.
-   * @param googleAccessToken - The access token obtained from Google.
+   * @param _googleAccessToken - The access token obtained from Google.
    * @returns The generated JWT.
    * @throws Error if user profile cannot be fetched or user creation fails.
    */
-  async handleGoogleCallback(googleAccessToken: string): Promise<string> {
+  async handleGoogleCallback(_googleAccessToken: string): Promise<string> {
     try {
       // 1. Fetch user profile from Google using the access token
       // The @fastify/oauth2 plugin often does this automatically or provides a helper
@@ -37,14 +37,11 @@ export class AuthService {
       // This service method should ideally receive the *profile*, not the token.
 
       throw new Error(
-        "AuthService.handleGoogleCallback should receive profile data, not access token directly. See controller."
+        'AuthService.handleGoogleCallback should receive profile data, not access token directly. See controller.',
       );
     } catch (error) {
-      this.fastify.log.error(
-        "Error handling Google callback in service:",
-        error
-      );
-      throw new Error("Failed to process Google login.");
+      this.fastify.log.error('Error handling Google callback in service:', error);
+      throw new Error('Failed to process Google login.');
     }
   }
 
@@ -57,18 +54,16 @@ export class AuthService {
   async processGoogleLogin(googleProfile: GoogleUserProfile): Promise<string> {
     try {
       // Log the profile data to help debug
-      this.fastify.log.info({ googleProfile }, "Processing Google profile");
+      this.fastify.log.info({ googleProfile }, 'Processing Google profile');
 
       // Check if sub exists in the profile - this is the Google ID
       if (!googleProfile.sub) {
-        throw new Error("Google profile ID is missing.");
+        throw new Error('Google profile ID is missing.');
       }
 
       // 2. Find or create user in the database using the original Google profile
       // The UserService should be able to handle the standard OpenID Connect profile format
-      const user = await this.userService.findOrCreateUserByGoogleProfile(
-        googleProfile
-      );
+      const user = await this.userService.findOrCreateUserByGoogleProfile(googleProfile);
 
       // 3. Prepare JWT payload
       const payload: UserJWTPayload = {
@@ -82,12 +77,12 @@ export class AuthService {
 
       return token;
     } catch (error) {
-      this.fastify.log.error("Error processing Google login:", error);
+      this.fastify.log.error('Error processing Google login:', error);
       // Log specific error if possible (e.g., DB error)
       if (error instanceof Error) {
         throw new Error(`Google login processing failed: ${error.message}`);
       }
-      throw new Error("An unexpected error occurred during Google login.");
+      throw new Error('An unexpected error occurred during Google login.');
     }
   }
 
