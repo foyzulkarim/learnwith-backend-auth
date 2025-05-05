@@ -1,0 +1,44 @@
+// prisma/schema.prisma
+
+generator client {
+  provider        = "prisma-client-js"
+  // If targeting D1 directly isn't feasible from Cloud Run,
+  // you might need a different setup or use the Data Proxy/HTTP API.
+  // For Workers, you'd use:
+  // previewFeatures = ["driverAdapters"]
+  // provider = "prisma-client-js"
+  // output   = "../node_modules/.prisma/client" // Adjust if needed
+}
+
+datasource db {
+  provider = "sqlite" // For D1, often represented as sqlite locally or via adapter
+  url      = env("DATABASE_URL")
+  // For Workers + D1 adapter use:
+  // provider = "sqlite"
+  // url      = "wrangler-d1:///<YOUR_DB_BINDING_NAME>"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  googleId  String?  @unique // Store the unique Google User ID
+  // Add other fields as needed (e.g., profile picture URL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Add relations if needed, e.g., to refresh tokens
+  // refreshTokens RefreshToken[]
+}
+
+// Optional: Model for refresh tokens if implementing refresh logic
+// model RefreshToken {
+//   id        String   @id @default(cuid())
+//   hashedToken String @unique
+//   userId    String
+//   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+//   revoked   Boolean  @default(false)
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+// }
+
