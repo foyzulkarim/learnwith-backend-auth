@@ -44,6 +44,8 @@ export class AuthController {
       const jwtToken = await this.authService.processGoogleLogin(userProfile);
 
       // 4. Set the JWT token in an HTTP-only cookie
+      // This cookie will be checked for authentication in protected routes
+      // Even if Authorization header is bypassed, this cookie will be verified
       reply.setCookie('auth_token', jwtToken, {
         httpOnly: true, // Prevent access from JavaScript
         secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
@@ -68,4 +70,14 @@ export class AuthController {
   }
 
   // Add other controller methods (e.g., for initiating password reset, etc.)
+
+  async logoutHandler(_request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    reply.clearCookie('auth_token', {
+      path: '/',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+    reply.send({ message: 'Logged out successfully' });
+  }
 }

@@ -4,6 +4,10 @@
   "description": "",
   "main": "index.js",
   "type": "module",
+  "volta": {
+    "node": "24.0.0",
+    "npm": "11.3.0"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
@@ -36,6 +40,7 @@
     "typescript-eslint": "^8.31.1"
   },
   "dependencies": {
+    "@fastify/cookie": "^9.1.0",
     "@fastify/jwt": "^9.1.0",
     "@fastify/oauth2": "^8.1.2",
     "@prisma/client": "^6.7.0",

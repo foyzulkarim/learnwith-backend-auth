@@ -37,6 +37,10 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
       expiresIn: '15m', // Access token expiry (e.g., 15 minutes)
       // Consider adding 'iss' (issuer) and 'aud' (audience) for security
     },
+    cookie: {
+      cookieName: 'auth_token', // The name of the cookie set in auth.controller.ts
+      signed: false, // We're not signing the cookie as we're using httpOnly instead
+    },
     // Add verify options if needed
   });
 
@@ -45,6 +49,7 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
     'authenticate',
     async function (request: FastifyRequest, reply: FastifyReply): Promise<void> {
       try {
+        // First check for token in cookie, then fall back to Authorization header
         await request.jwtVerify();
         // Attach user payload to request for easier access in handlers
         // Note: The type assertion might be needed depending on exact @fastify/jwt setup

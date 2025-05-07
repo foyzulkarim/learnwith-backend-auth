@@ -30,8 +30,8 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
     authController.googleCallbackHandler.bind(authController), // Bind controller context
   );
 
-  // --- Example Protected Route ---
-  // Example route demonstrating JWT authentication check
+  // --- Example Protected Routes ---
+  // Example route demonstrating JWT authentication check with user data
   fastify.get('/me', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     // Access authenticated user data via request.jwt.user
     const userData = request.jwt.user;
@@ -43,6 +43,19 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
     // Return non-sensitive user info
     return { id: fullUser.id, email: fullUser.email, name: fullUser.name };
   });
+
+  // Test route to verify cookie-based authentication
+  fastify.get('/protected', { preHandler: [fastify.authenticate] }, async (request) => {
+    // If we get here, authentication via either cookie or Authorization header was successful
+    return {
+      message: 'Authentication successful!',
+      userId: request.jwt.user.id,
+      email: request.jwt.user.email,
+    };
+  });
+
+  // Logout route to clear the auth_token cookie
+  fastify.post('/logout', authController.logoutHandler.bind(authController));
 
   fastify.log.info('Auth routes registered');
 }

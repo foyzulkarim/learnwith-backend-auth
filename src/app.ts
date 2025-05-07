@@ -23,10 +23,12 @@ export function buildApp(): FastifyInstance {
   // Register Prisma first as other services/routes might depend on it
   fastify.register(prismaPlugin);
 
+  // Register cookie plugin before JWT as we need it for token extraction
+  fastify.register(import('@fastify/cookie'));
+
   // Register essential plugins
   fastify.register(jwtPlugin);
   fastify.register(oauth2Plugin);
-  // fastify.register(import('@fastify/cookie')); // Uncomment if using cookies for state or token transfer
 
   // --- Register Routes ---
   // Prefix all auth routes with /api/auth
