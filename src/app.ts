@@ -26,6 +26,17 @@ export function buildApp(): FastifyInstance {
   // Register cookie plugin before JWT as we need it for token extraction
   fastify.register(import('@fastify/cookie'));
 
+  // Register CORS plugin to handle preflight requests
+  fastify.register(import('@fastify/cors'), {
+    origin:
+      config.NODE_ENV === 'development'
+        ? 'http://localhost:3030' // Vite dev server default port
+        : config.ALLOWED_ORIGINS?.split(',') || true,
+    credentials: true, // Important for cookies with cross-origin requests
+    methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
   // Register essential plugins
   fastify.register(jwtPlugin);
   fastify.register(oauth2Plugin);

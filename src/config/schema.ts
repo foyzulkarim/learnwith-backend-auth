@@ -8,6 +8,7 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().url(), // Connection string for Prisma (potentially D1 HTTP API endpoint + token)
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
   FRONTEND_URL: z.string().url().default('http://localhost:3030'), // URL of your frontend app
+  ALLOWED_ORIGINS: z.string().optional().default('http://localhost:5173'), // Comma-separated list of allowed origins for CORS
 
   // Google OAuth Credentials
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
@@ -24,9 +25,9 @@ PORT=3000
 DATABASE_URL="prisma://..." # Or your D1 connection details
 JWT_SECRET="your_super_secret_jwt_key_at_least_32_chars_long"
 FRONTEND_URL="http://localhost:5173" # Or your deployed frontend URL
+ALLOWED_ORIGINS="http://localhost:5173,https://your-app.com" # For CORS
 
 GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
 GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET"
 GOOGLE_CALLBACK_URL="http://localhost:3000/api/auth/google/callback" # Adjust for deployment
 */
-

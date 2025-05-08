@@ -54,6 +54,42 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
     };
   });
 
+  // Route to refresh the token
+  fastify.post('/refresh', async (request, reply) => {
+    // Extract the refresh token from the cookie
+    const refreshToken = request.cookies.refresh_token;
+
+    if (!refreshToken) {
+      return reply.code(401).send({ message: 'Refresh token not found' });
+    }
+
+    try {
+      // Verify and refresh the token
+      const newTokens = await authService.refreshToken(refreshToken);
+
+      // Set the new tokens in cookies
+      reply.setCookie('auth_token', newTokens.accessToken, {
+        path: '/',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      });
+
+      // Also set the new refresh token cookie
+      reply.setCookie('refresh_token', newTokens.refreshToken, {
+        path: '/',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      });
+
+      return { message: 'Token refreshed successfully' };
+    } catch (err) {
+      fastify.log.error('Token refresh error:', err);
+      return reply.code(401).send({ message: 'Invalid refresh token' });
+    }
+  });
+
   // Logout route to clear the auth_token cookie
   fastify.post('/logout', authController.logoutHandler.bind(authController));
 

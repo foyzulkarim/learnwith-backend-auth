@@ -49,9 +49,11 @@ export class AuthService {
    * Processes Google user profile, finds/creates user, and generates JWT.
    * (This is the method the controller should call)
    * @param googleProfile - User profile data from Google.
-   * @returns The generated JWT.
+   * @returns The generated JWTs (accessToken and refreshToken).
    */
-  async processGoogleLogin(googleProfile: GoogleUserProfile): Promise<string> {
+  async processGoogleLogin(
+    googleProfile: GoogleUserProfile,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     try {
       // Log the profile data to help debug
       this.fastify.log.info({ googleProfile }, 'Processing Google profile');
@@ -72,10 +74,11 @@ export class AuthService {
         // Add other claims as needed
       };
 
-      // 4. Generate JWT
-      const token = await this.fastify.jwt.sign(payload);
+      // 4. Generate JWTs
+      const accessToken = await this.fastify.jwt.sign(payload, { expiresIn: '1h' });
+      const refreshToken = await this.fastify.jwt.sign(payload, { expiresIn: '7d' });
 
-      return token;
+      return { accessToken, refreshToken };
     } catch (error) {
       this.fastify.log.error('Error processing Google login:', error);
       // Log specific error if possible (e.g., DB error)
@@ -83,6 +86,42 @@ export class AuthService {
         throw new Error(`Google login processing failed: ${error.message}`);
       }
       throw new Error('An unexpected error occurred during Google login.');
+    }
+  }
+
+  /**
+   * Refreshes the user's authentication token
+   * @param refreshToken - The refresh token from the cookie
+   * @returns The new access token and refresh token
+   */
+  async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    try {
+      // Verify the refresh token
+      const decoded = (await this.fastify.jwt.verify(refreshToken)) as UserJWTPayload;
+
+      // Check if the user still exists in the database
+      const user = await this.userService.findUserById(decoded.id);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Create a new JWT payload
+      const payload: UserJWTPayload = {
+        id: user.id,
+        email: user.email,
+      };
+
+      // Generate new tokens
+      const accessToken = await this.fastify.jwt.sign(payload, { expiresIn: '1h' });
+      const newRefreshToken = await this.fastify.jwt.sign(payload, { expiresIn: '7d' });
+
+      return {
+        accessToken,
+        refreshToken: newRefreshToken,
+      };
+    } catch (error) {
+      this.fastify.log.error('Error refreshing token:', error);
+      throw new Error('Invalid refresh token');
     }
   }
 

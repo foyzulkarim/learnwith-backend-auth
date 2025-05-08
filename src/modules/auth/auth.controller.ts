@@ -41,7 +41,8 @@ export class AuthController {
       fastify.log.info({ googleProfile: userProfile }, 'Fetched Google user profile.');
 
       // 3. Process login (find/create user, generate JWT) using the AuthService
-      const jwtToken = await this.authService.processGoogleLogin(userProfile);
+      const { accessToken: jwtToken, refreshToken } =
+        await this.authService.processGoogleLogin(userProfile);
 
       // 4. Set the JWT token in an HTTP-only cookie
       // This cookie will be checked for authentication in protected routes
@@ -53,8 +54,16 @@ export class AuthController {
         path: '/', // Cookie is valid for the entire domain
       });
 
+      // Also set the refresh token in a separate cookie
+      reply.setCookie('refresh_token', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+      });
+
       // Redirect user back to the frontend without including the token in the URL
-      const redirectUrl = new URL(config.FRONTEND_URL); // Use configured frontend URL
+      const redirectUrl = new URL(config.FRONTEND_URL);
       reply.redirect(redirectUrl.toString());
     } catch (error: unknown) {
       fastify.log.error({ err: error }, 'Google OAuth callback error');
@@ -78,6 +87,15 @@ export class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
     });
+
+    // Also clear the refresh token cookie
+    reply.clearCookie('refresh_token', {
+      path: '/',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+
     reply.send({ message: 'Logged out successfully' });
   }
 }
