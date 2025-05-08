@@ -52,5 +52,7 @@ export function buildApp(): FastifyInstance {
     });
   });
 
+  fastify.log.info('Fastify server initialized');
+
   return fastify;
 }

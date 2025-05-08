@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "type": "module",
+  "type": "commonjs",
   "volta": {
     "node": "24.0.0",
     "npm": "11.3.0"
@@ -12,7 +12,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "tsc --watch & node --watch dist/server.js",
+    "dev": "tsx watch src/server.ts",
     "prepare": "husky install",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
@@ -36,11 +36,13 @@
     "prettier": "^3.5.3",
     "prisma": "^6.7.0",
     "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.16",
+    "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.31.1"
   },
   "dependencies": {
-    "@fastify/cookie": "^9.1.0",
+    "@fastify/cookie": "^11.0.2",
     "@fastify/jwt": "^9.1.0",
     "@fastify/oauth2": "^8.1.2",
     "@prisma/client": "^6.7.0",
