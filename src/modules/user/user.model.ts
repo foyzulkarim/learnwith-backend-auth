@@ -2,7 +2,9 @@ import mongoose, { Schema, Document } from 'mongoose';
 import { User as UserType } from './types';
 
 // Create interface that extends Mongoose Document
-export interface UserDocument extends UserType, Document {}
+export interface UserDocument extends Omit<UserType, 'id'>, Document {
+  // The id will be provided by Document._id
+}
 
 // Create Mongoose schema for User
 const UserSchema = new Schema<UserDocument>(

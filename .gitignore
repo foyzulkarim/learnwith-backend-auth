@@ -137,5 +137,3 @@ dist
 
 # SQLite database files
 *.db
-prisma/*.db
-prisma/*.db-journal

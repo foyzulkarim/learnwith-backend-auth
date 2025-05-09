@@ -12,8 +12,7 @@ module.exports = tseslint.config(
     // Global ignores - applied to all configurations below
     ignores: [
       'node_modules/**',
-      'dist/**',
-      'prisma/**'
+      'dist/**'
     ],
   },
   {

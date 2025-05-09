@@ -1,5 +1,5 @@
 /**
- * Interface that matches the Prisma User model
+ * Interface that represents the User model
  */
 export interface User {
   id: string;
@@ -8,4 +8,4 @@ export interface User {
   googleId: string | null;
   createdAt: Date;
   updatedAt: Date;
-} 
+}
