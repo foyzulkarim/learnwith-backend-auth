@@ -2,20 +2,16 @@
 
 generator client {
   provider        = "prisma-client-js"
+  output          = "../node_modules/.prisma/client"
   // If targeting D1 directly isn't feasible from Cloud Run,
   // you might need a different setup or use the Data Proxy/HTTP API.
   // For Workers, you'd use:
   // previewFeatures = ["driverAdapters"]
-  // provider = "prisma-client-js"
-  // output   = "../node_modules/.prisma/client" // Adjust if needed
 }
 
 datasource db {
-  provider = "sqlite" // For D1, often represented as sqlite locally or via adapter
+  provider = "postgresql"
   url      = env("DATABASE_URL")
-  // For Workers + D1 adapter use:
-  // provider = "sqlite"
-  // url      = "wrangler-d1:///<YOUR_DB_BINDING_NAME>"
 }
 
 model User {
