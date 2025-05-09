@@ -1,6 +1,8 @@
 // src/modules/user/user.service.ts
-import { PrismaClient } from '@prisma/client';
-import { User } from './types'; // Import User from our types file
+import { FastifyInstance } from 'fastify';
+import { User } from './types';
+import { getUserModel, UserDocument } from './user.model';
+import { ValidationError, DatabaseError } from '../../utils/errors';
 
 // Define the structure of the Google profile data we expect
 // This matches the OpenID Connect format that Google returns
@@ -22,7 +24,11 @@ export interface GoogleUserProfile {
 }
 
 export class UserService {
-  constructor(private prisma: PrismaClient) {}
+  private userModel;
+
+  constructor(private fastify: FastifyInstance) {
+    this.userModel = getUserModel();
+  }
 
   /**
    * Finds an existing user by their Google ID or email,
@@ -31,79 +37,121 @@ export class UserService {
    * @returns The found or created User object.
    */
   async findOrCreateUserByGoogleProfile(profile: GoogleUserProfile): Promise<User> {
-    // Get the Google ID (sub is the OpenID Connect standard)
-    const googleId = profile.sub || profile.id;
-    if (!googleId) {
-      throw new Error('Google profile ID is missing.');
-    }
-
-    // Get the email (direct email field or from the emails array)
-    const email =
-      profile.email ||
-      (profile.emails && profile.emails.length > 0 ? profile.emails[0].value : undefined);
-
-    if (!email) {
-      throw new Error('Google profile email is missing.');
-    }
-
-    // Get the name
-    const name =
-      profile.name ||
-      profile.displayName ||
-      `${profile.given_name || ''} ${profile.family_name || ''}`.trim() ||
-      'User';
-
-    // 1. Try to find user by Google ID
-    let user = await this.prisma.user.findUnique({
-      where: { googleId },
-    });
-
-    if (user) {
-      // Optional: Update user's name or other details if they've changed in Google
-      if (user.name !== name) {
-        user = await this.prisma.user.update({
-          where: { id: user.id },
-          data: { name },
-        });
+    try {
+      // Get the Google ID (sub is the OpenID Connect standard)
+      const googleId = profile.sub || profile.id;
+      if (!googleId) {
+        throw new ValidationError('Google profile ID is missing.', 'GOOGLE_PROFILE_INVALID');
       }
-      return user;
-    }
 
-    // 2. If not found by Google ID, try to find by email
-    // This handles cases where a user might have previously signed up via email
-    user = await this.prisma.user.findUnique({
-      where: { email },
-    });
+      // Get the email (direct email field or from the emails array)
+      const email =
+        profile.email ||
+        (profile.emails && profile.emails.length > 0 ? profile.emails[0].value : undefined);
 
-    if (user) {
-      // User exists with this email but hasn't linked Google yet.
-      // Link the Google ID to the existing account.
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          googleId: googleId,
-          name: user.name || name, // Keep existing name or update if missing
-        },
-      });
-      return user;
-    }
+      if (!email) {
+        throw new ValidationError('Google profile email is missing.', 'GOOGLE_PROFILE_INVALID');
+      }
 
-    // 3. If not found by email either, create a new user
-    user = await this.prisma.user.create({
-      data: {
-        email: email,
-        googleId: googleId,
-        name: name,
+      // Get the name
+      const name =
+        profile.name ||
+        profile.displayName ||
+        `${profile.given_name || ''} ${profile.family_name || ''}`.trim() ||
+        'User';
+
+      // 1. Try to find user by Google ID
+      let user = await this.userModel.findOne({ googleId });
+
+      if (user) {
+        // Optional: Update user's name or other details if they've changed in Google
+        if (user.name !== name) {
+          user.name = name;
+          await user.save();
+        }
+        return this.convertToUser(user);
+      }
+
+      // 2. If not found by Google ID, try to find by email
+      // This handles cases where a user might have previously signed up via email
+      user = await this.userModel.findOne({ email });
+
+      if (user) {
+        // User exists with this email but hasn't linked Google yet.
+        // Link the Google ID to the existing account.
+        user.googleId = googleId;
+        if (!user.name) user.name = name;
+        await user.save();
+        return this.convertToUser(user);
+      }
+
+      // 3. If not found by email either, create a new user
+      user = await this.userModel.create({
+        email,
+        googleId,
+        name,
         // Add other default fields if necessary
-      },
-    });
+      });
 
-    return user;
+      return this.convertToUser(user);
+    } catch (error) {
+      this.fastify.log.error({ err: error }, 'Error finding or creating user by Google profile');
+
+      // If it's already one of our custom errors, rethrow it
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+
+      // Map other errors to appropriate types
+      if (error instanceof Error) {
+        throw new DatabaseError(
+          `Error creating or finding user: ${error.message}`,
+          'USER_DB_ERROR',
+        );
+      }
+
+      throw new DatabaseError(
+        'Unknown error occurred while processing user data',
+        'USER_UNKNOWN_ERROR',
+      );
+    }
   }
 
-  // Add other user-related methods here (e.g., findById, updateUser, etc.)
-  // Helper in user service (add this to UserService class)
+  /**
+   * Finds a user by their ID
+   * @param id - The user's ID
+   * @returns The user or null if not found
+   */
   async findUserById(id: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { id } });
+    try {
+      const user = await this.userModel.findById(id);
+      if (!user) {
+        return null;
+      }
+      return this.convertToUser(user);
+    } catch (error) {
+      this.fastify.log.error({ err: error, userId: id }, 'Error finding user by ID');
+      throw new DatabaseError(
+        `Error finding user: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'USER_LOOKUP_ERROR',
+      );
+    }
+  }
+
+  /**
+   * Converts a Mongoose user document to a plain User object
+   * @param userDoc - The Mongoose user document
+   * @returns A plain User object
+   */
+  private convertToUser(userDoc: UserDocument): User {
+    const user = userDoc.toObject();
+    return {
+      id: user._id.toString(),
+      email: user.email,
+      name: user.name,
+      googleId: user.googleId,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 }

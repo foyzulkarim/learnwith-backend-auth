@@ -1,58 +1,109 @@
-# learnwith-backend
+# LearnWith Authentication Backend
 
-## Database Setup
+This is the authentication service for the LearnWith platform, handling user authentication through Google OAuth 2.0.
 
-This project uses Prisma with PostgreSQL for both development and production environments.
+## Technology Stack
+
+- **Node.js**: Runtime environment
+- **TypeScript**: Programming language
+- **Fastify**: Web framework
+- **MongoDB**: Database
+- **Mongoose**: MongoDB ODM
+- **@fastify/oauth2**: OAuth authentication
+- **JWT**: JSON Web Tokens for authentication
+
+## Getting Started
 
 ### Prerequisites
 
-- PostgreSQL server (local or containerized)
-- Node.js and npm
+- Node.js 24.x
+- npm 11.x
+- MongoDB 6.x+
 
-### Local Development Setup
+### Installation
 
-1. Start the PostgreSQL database container:
-
+1. Clone the repository:
    ```bash
-   docker compose up -d db
+   git clone https://github.com/yourusername/learnwith-backend-auth.git
+   cd learnwith-backend-auth
    ```
 
-2. Make sure your `.env` file contains the correct database URL:
-
-   ```
-   DATABASE_URL="postgresql://postgres:postgres@localhost:5433/learnwith?schema=public"
-   ```
-
-3. Run the database migrations:
-
+2. Install dependencies:
    ```bash
-   npm run prisma:migrate
+   npm install
    ```
 
-4. Generate the Prisma client:
-
+3. Create `.env` file:
    ```bash
-   npm run prisma:generate
+   cp .env.example .env
    ```
 
-5. Test your database connection:
+4. Fill in the environment variables in `.env`:
+   ```
+   NODE_ENV=development
+   PORT=3000
+   DATABASE_URL=mongodb://localhost:27017/learnwith
+   JWT_SECRET=your_super_secret_jwt_key_at_least_32_chars_long
+   FRONTEND_URL=http://localhost:5173
+   ALLOWED_ORIGINS=http://localhost:5173
 
+   # Google OAuth Credentials (Get these from Google Cloud Console)
+   GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=your_google_client_secret
+   GOOGLE_CALLBACK_URL=http://localhost:3000/api/auth/google/callback
+   ```
+
+5. Test the database connection:
    ```bash
    npm run db:test
    ```
 
-### Useful Database Commands
+6. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-- Open Prisma Studio to browse/edit data: `npm run prisma:studio`
-- Reset the database: `npm run prisma:reset`
-- Push schema changes without migrations: `npm run prisma:push`
+## Authentication Flow
 
-## Docker Setup
+1. User initiates a Google login from the frontend
+2. User is redirected to Google for authentication
+3. After successful authentication, Google redirects back to our callback URL
+4. Server receives user info from Google, creates/finds user account in MongoDB
+5. Server generates JWT tokens and sends them to the client via HTTP-only cookies
+6. Client can access protected routes using the JWT token
 
-The project includes Docker configuration for running both the API and PostgreSQL database in containers. To start the entire stack:
+## API Endpoints
+
+### Authentication
+
+- `GET /api/auth/google`: Initiates Google OAuth login
+- `GET /api/auth/google/callback`: Callback URL for Google OAuth
+- `POST /api/auth/refresh`: Refreshes access token using refresh token
+- `POST /api/auth/logout`: Logout user (clears auth cookies)
+
+### Protected Routes
+
+- `GET /api/auth/me`: Get current authenticated user profile
+- `GET /api/auth/protected`: Test route for authenticated users
+
+## Running in Production
+
+1. Build the project:
+   ```bash
+   npm run build
+   ```
+
+2. Start the production server:
+   ```bash
+   npm start
+   ```
+
+## Docker Support
+
+You can also run the application using Docker:
 
 ```bash
-docker compose up -d
+docker-compose up -d
 ```
 
-This will start both the API server and the PostgreSQL database.
+This will start both the application and a MongoDB instance.

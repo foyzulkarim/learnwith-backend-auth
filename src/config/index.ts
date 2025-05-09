@@ -19,10 +19,7 @@ const result = dotenv.config({ path: envPath });
 
 if (result.error && nodeEnv !== 'production') {
   // Allow missing .env in production if variables are set via the environment
-  console.warn(
-    `Warning: Could not load .env file from ${envPath}:`,
-    result.error.message
-  );
+  console.warn(`Warning: Could not load .env file from ${envPath}:`, result.error.message);
 }
 
 // Parse and validate the config
@@ -35,6 +32,35 @@ try {
   console.error('❌ Invalid environment variables:', error);
   // Exit the process if validation fails, as the app cannot run correctly
   process.exit(1);
+}
+
+// Utility to check if environment is production
+export const isProd = config.NODE_ENV === 'production';
+export const isDev = config.NODE_ENV === 'development';
+export const isTest = config.NODE_ENV === 'test';
+
+// Standard cookie configuration to ensure consistency
+export interface CookieOptions {
+  path?: string;
+  domain?: string;
+  maxAge?: number;
+  signed?: boolean;
+  expires?: Date;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'strict' | 'lax' | 'none';
+}
+
+// Helper function to get consistent cookie configuration
+export function getCookieConfig(options: Partial<CookieOptions> = {}): CookieOptions {
+  return {
+    path: '/',
+    httpOnly: true,
+    secure: isProd, // Only secure in production
+    sameSite: isProd ? 'none' : config.COOKIE_SAME_SITE, // Use 'none' in production for cross-site scenarios
+    maxAge: 604800000, // Default to 7 days in milliseconds (same as refresh token)
+    ...options,
+  };
 }
 
 // Export the validated config

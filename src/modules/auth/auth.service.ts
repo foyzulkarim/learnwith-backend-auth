@@ -2,6 +2,14 @@
 import { FastifyInstance } from 'fastify';
 import { UserService, GoogleUserProfile } from '../user/user.service'; // Import UserService
 import { UserJWTPayload } from '../../plugins/jwt'; // Import JWT payload type
+import { User } from '../user/types';
+import {
+  AuthenticationError,
+  ValidationError,
+  NotFoundError,
+  ExternalServiceError,
+} from '../../utils/errors';
+import { config } from '../../config';
 
 export class AuthService {
   // Inject dependencies (Fastify instance for JWT signing, UserService)
@@ -11,43 +19,7 @@ export class AuthService {
   ) {}
 
   /**
-   * Handles the Google OAuth callback. Finds or creates the user
-   * and generates a JWT.
-   * @param _googleAccessToken - The access token obtained from Google.
-   * @returns The generated JWT.
-   * @throws Error if user profile cannot be fetched or user creation fails.
-   */
-  async handleGoogleCallback(_googleAccessToken: string): Promise<string> {
-    try {
-      // 1. Fetch user profile from Google using the access token
-      // The @fastify/oauth2 plugin often does this automatically or provides a helper
-      // Here we assume we get the profile data directly or need to fetch it.
-      // Let's use the plugin's built-in mechanism if available.
-      // NOTE: @fastify/oauth2 typically provides user info via `request.user`
-      // or requires a separate call using the token. Check plugin docs.
-      // For this example, let's assume we need to fetch it manually (less ideal).
-
-      // **Alternative using plugin's built-in fetch:**
-      // The plugin might provide a method like `fastify.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow`
-      // and then `fastify.googleOAuth2.userinfo(token)`
-      // Let's assume the controller passes the fetched profile directly for simplicity here.
-
-      // This part is usually handled *within* the callback route handler using
-      // the token provided by @fastify/oauth2. See auth.controller.ts.
-      // This service method should ideally receive the *profile*, not the token.
-
-      throw new Error(
-        'AuthService.handleGoogleCallback should receive profile data, not access token directly. See controller.',
-      );
-    } catch (error) {
-      this.fastify.log.error('Error handling Google callback in service:', error);
-      throw new Error('Failed to process Google login.');
-    }
-  }
-
-  /**
    * Processes Google user profile, finds/creates user, and generates JWT.
-   * (This is the method the controller should call)
    * @param googleProfile - User profile data from Google.
    * @returns The generated JWTs (accessToken and refreshToken).
    */
@@ -55,38 +27,88 @@ export class AuthService {
     googleProfile: GoogleUserProfile,
   ): Promise<{ accessToken: string; refreshToken: string }> {
     try {
-      // Log the profile data to help debug
-      this.fastify.log.info({ googleProfile }, 'Processing Google profile');
+      // Validate Google profile has all required fields
+      this.validateGoogleProfile(googleProfile);
 
-      // Check if sub exists in the profile - this is the Google ID
-      if (!googleProfile.sub) {
-        throw new Error('Google profile ID is missing.');
-      }
-
-      // 2. Find or create user in the database using the original Google profile
-      // The UserService should be able to handle the standard OpenID Connect profile format
+      // Find or create user in the database using the original Google profile
       const user = await this.userService.findOrCreateUserByGoogleProfile(googleProfile);
 
-      // 3. Prepare JWT payload
-      const payload: UserJWTPayload = {
-        id: user.id,
-        email: user.email,
-        // Add other claims as needed
-      };
-
-      // 4. Generate JWTs
-      const accessToken = await this.fastify.jwt.sign(payload, { expiresIn: '1h' });
-      const refreshToken = await this.fastify.jwt.sign(payload, { expiresIn: '7d' });
-
-      return { accessToken, refreshToken };
+      // Generate tokens for the user
+      return this.generateTokens(user);
     } catch (error) {
-      this.fastify.log.error('Error processing Google login:', error);
-      // Log specific error if possible (e.g., DB error)
-      if (error instanceof Error) {
-        throw new Error(`Google login processing failed: ${error.message}`);
+      this.fastify.log.error({ err: error }, 'Error processing Google login');
+
+      // If it's already one of our custom errors, rethrow it
+      if (
+        error instanceof ValidationError ||
+        error instanceof NotFoundError ||
+        error instanceof AuthenticationError
+      ) {
+        throw error;
       }
-      throw new Error('An unexpected error occurred during Google login.');
+
+      // Otherwise wrap in an appropriate custom error
+      if (error instanceof Error) {
+        throw new ExternalServiceError(
+          `Google login processing failed: ${error.message}`,
+          'GOOGLE_AUTH_ERROR',
+        );
+      }
+
+      throw new ExternalServiceError(
+        'An unexpected error occurred during Google login.',
+        'GOOGLE_AUTH_UNKNOWN_ERROR',
+      );
     }
+  }
+
+  /**
+   * Validates that a Google profile contains all required fields
+   * @param profile - The Google profile to validate
+   * @throws ValidationError if any required fields are missing
+   */
+  private validateGoogleProfile(profile: GoogleUserProfile): void {
+    const requiredFields = ['sub', 'email'];
+    const missingFields = requiredFields.filter(
+      (field) => !profile[field as keyof GoogleUserProfile],
+    );
+
+    if (missingFields.length > 0) {
+      throw new ValidationError(
+        `Google profile missing required fields: ${missingFields.join(', ')}`,
+        'GOOGLE_PROFILE_INVALID',
+      );
+    }
+
+    // Ensure the email is verified (Google should ensure this, but double-check)
+    if (profile.email_verified === false) {
+      throw new ValidationError('Google email is not verified', 'GOOGLE_EMAIL_UNVERIFIED');
+    }
+  }
+
+  /**
+   * Generates JWT tokens for an authenticated user
+   * @param user - The authenticated user
+   * @returns Access token and refresh token
+   */
+  private async generateTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
+    // Prepare JWT payload
+    const payload: UserJWTPayload = {
+      id: user.id,
+      email: user.email,
+      // Add other claims as needed
+    };
+
+    // Generate JWTs with expiry times from config
+    const accessToken = await this.fastify.jwt.sign(payload, {
+      expiresIn: config.JWT_ACCESS_TOKEN_EXPIRY,
+    });
+
+    const refreshToken = await this.fastify.jwt.sign(payload, {
+      expiresIn: config.JWT_REFRESH_TOKEN_EXPIRY,
+    });
+
+    return { accessToken, refreshToken };
   }
 
   /**
@@ -102,26 +124,21 @@ export class AuthService {
       // Check if the user still exists in the database
       const user = await this.userService.findUserById(decoded.id);
       if (!user) {
-        throw new Error('User not found');
+        throw new NotFoundError('User not found', 'USER_NOT_FOUND');
       }
 
-      // Create a new JWT payload
-      const payload: UserJWTPayload = {
-        id: user.id,
-        email: user.email,
-      };
-
-      // Generate new tokens
-      const accessToken = await this.fastify.jwt.sign(payload, { expiresIn: '1h' });
-      const newRefreshToken = await this.fastify.jwt.sign(payload, { expiresIn: '7d' });
-
-      return {
-        accessToken,
-        refreshToken: newRefreshToken,
-      };
+      // Generate new tokens for the user
+      return this.generateTokens(user);
     } catch (error) {
-      this.fastify.log.error('Error refreshing token:', error);
-      throw new Error('Invalid refresh token');
+      this.fastify.log.error({ err: error }, 'Error refreshing token');
+
+      // If it's already a NotFoundError, rethrow it
+      if (error instanceof NotFoundError) {
+        throw error;
+      }
+
+      // Otherwise throw an authentication error
+      throw new AuthenticationError('Invalid or expired refresh token', 'INVALID_REFRESH_TOKEN');
     }
   }
 

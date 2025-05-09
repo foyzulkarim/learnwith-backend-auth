@@ -1,11 +1,12 @@
 // src/app.ts
 import Fastify, { FastifyInstance } from 'fastify';
-import { config } from './config'; // Load validated config
+import { config, isDev } from './config'; // Load validated config
+import { isAppError, convertToAppError } from './utils/errors'; // Import error utilities
 
 // Import plugins
 import jwtPlugin from './plugins/jwt';
 import oauth2Plugin from './plugins/oauth2';
-import prismaPlugin from './plugins/prisma'; // Make sure Prisma plugin is registered first
+import mongoosePlugin from './plugins/mongoose'; // MongoDB connection plugin
 
 // Import routes
 import authRoutes from './modules/auth/auth.route';
@@ -14,24 +15,21 @@ import authRoutes from './modules/auth/auth.route';
 export function buildApp(): FastifyInstance {
   const fastify = Fastify({
     logger: {
-      level: config.NODE_ENV === 'development' ? 'info' : 'warn',
-      transport: config.NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
+      level: isDev ? 'info' : 'warn',
+      transport: isDev ? { target: 'pino-pretty' } : undefined,
     },
   });
 
   // --- Register Plugins ---
-  // Register Prisma first as other services/routes might depend on it
-  fastify.register(prismaPlugin);
+  // Register MongoDB connection first as other services/routes might depend on it
+  fastify.register(mongoosePlugin);
 
   // Register cookie plugin before JWT as we need it for token extraction
   fastify.register(import('@fastify/cookie'));
 
   // Register CORS plugin to handle preflight requests
   fastify.register(import('@fastify/cors'), {
-    origin:
-      config.NODE_ENV === 'development'
-        ? 'http://localhost:3030' // Vite dev server default port
-        : config.ALLOWED_ORIGINS?.split(',') || true,
+    origin: isDev ? 'http://localhost:3030' : config.ALLOWED_ORIGINS?.split(',') || true,
     credentials: true, // Important for cookies with cross-origin requests
     methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -54,13 +52,50 @@ export function buildApp(): FastifyInstance {
 
   // --- Error Handling (Optional but Recommended) ---
   fastify.setErrorHandler((error, request, reply) => {
-    fastify.log.error(error);
-    // Customize error response based on error type or environment
-    reply.status(error.statusCode || 500).send({
-      message: error.message || 'Internal Server Error',
-      // Avoid sending stack trace in production
-      ...(config.NODE_ENV !== 'production' && { stack: error.stack }),
-    });
+    // Convert to AppError if it's not already
+    const appError = isAppError(error) ? error : convertToAppError(error);
+
+    // Log the error with appropriate level based on status code
+    if (appError.statusCode >= 500) {
+      fastify.log.error(
+        {
+          err: error,
+          request: {
+            url: request.url,
+            method: request.method,
+            id: request.id,
+          },
+        },
+        'Server error occurred',
+      );
+    } else {
+      fastify.log.warn(
+        {
+          err: error,
+          request: {
+            url: request.url,
+            method: request.method,
+            id: request.id,
+          },
+        },
+        'Client error occurred',
+      );
+    }
+
+    // Prepare error response
+    const errorResponse = {
+      statusCode: appError.statusCode,
+      error: appError.errorCode,
+      message: appError.message,
+    };
+
+    // Add stack trace in non-production environments
+    if (config.NODE_ENV !== 'production' && appError.stack) {
+      Object.assign(errorResponse, { stack: appError.stack });
+    }
+
+    // Send the error response
+    reply.status(appError.statusCode).send(errorResponse);
   });
 
   fastify.log.info('Fastify server initialized');

@@ -8,7 +8,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4000
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/learnwith?schema=public
+      - DATABASE_URL=mongodb://mongo:27017/learnwith
       - JWT_SECRET=replace_with_your_secure_jwt_secret_at_least_32_chars
       - FRONTEND_URL=http://localhost:3030
       - ALLOWED_ORIGINS=http://localhost:3030
@@ -16,7 +16,7 @@ services:
       - GOOGLE_CLIENT_SECRET=your_google_client_secret
       - GOOGLE_CALLBACK_URL=http://localhost:4000/api/auth/google/callback
     depends_on:
-      - db
+      - mongo
     restart: unless-stopped
     volumes:
       # Mount for persistent logs if needed
@@ -27,22 +27,19 @@ services:
     networks:
       - learnwith-network
 
-  db:
-    image: postgres:16-alpine
+  mongo:
+    image: mongo:7.0
     ports:
-      - "5433:5432"
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=learnwith
+      - "27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongo_data:/data/db
     restart: unless-stopped
     networks:
       - learnwith-network
+    command: mongod --quiet --logpath /dev/null # Reduces log verbosity
 
 volumes:
-  postgres_data:
+  mongo_data:
 
 networks:
   learnwith-network:
