@@ -90,6 +90,7 @@ export class UserService {
         email,
         googleId,
         name,
+        role: 'viewer', // Default role for new users
         // Add other default fields if necessary
       });
 
@@ -150,6 +151,7 @@ export class UserService {
       email: user.email,
       name: user.name,
       googleId: user.googleId,
+      role: user.role,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { User as UserType } from './types';
+import { User as UserType, ROLES } from './types';
 
 // Create interface that extends Mongoose Document
 export interface UserDocument extends Omit<UserType, 'id'>, Document {
@@ -12,6 +12,12 @@ const UserSchema = new Schema<UserDocument>(
     email: { type: String, required: true, unique: true },
     name: { type: String },
     googleId: { type: String, sparse: true, unique: true },
+    role: {
+      type: String,
+      enum: ROLES,
+      default: 'viewer',
+      required: true,
+    },
     // Add any other fields needed
   },
   {
