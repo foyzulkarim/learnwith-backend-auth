@@ -12,11 +12,39 @@ export interface Course {
   featured?: boolean;
   bestseller?: boolean;
   isNew?: boolean;
-  totalLessons?: number;
+  totalLessons: number;
+  totalDuration?: string;
+  lastUpdated?: string;
+  language?: string;
+  captions?: string[];
+  studentCount?: number;
   completedLessons?: number;
   progress?: number;
   status?: string;
   publishedAt?: string;
-  studentCount?: number;
   completionRate?: number;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+}
+
+export interface Module {
+  id: number;
+  title: string;
+  courseId: number;
+  order: number;
+  lessons?: Lesson[];
+}
+
+export interface Lesson {
+  id: number;
+  title: string;
+  moduleId: number;
+  courseId: number;
+  videoUrl: string;
+  content: string;
+  duration: string;
+  order: number;
 }
