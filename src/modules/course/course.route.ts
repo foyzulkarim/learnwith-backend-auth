@@ -17,6 +17,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
 
   // Course CRUD
   fastify.post('/', courseController.createCourseHandler.bind(courseController));
+  fastify.post('/save', courseController.saveCourseHandler.bind(courseController));
   fastify.patch('/:courseId', courseController.updateCourseHandler.bind(courseController));
   fastify.delete('/:courseId', courseController.deleteCourseHandler.bind(courseController));
 

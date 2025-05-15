@@ -90,8 +90,67 @@ export class CourseController {
       const courseData = request.body;
       const course = await this.courseService.createCourse(courseData);
       reply.code(201).send(course);
-    } catch (error: any) {
-      reply.code(400).send({ error: 'Failed to create course', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to create course', details: errorMessage });
+    }
+  }
+
+  async saveCourseHandler(
+    request: FastifyRequest<{
+      Body: {
+        title: string;
+        description: string;
+        categoryId: number;
+        difficulty: string;
+        price: string;
+        isFeatured: boolean;
+        isBestseller: boolean;
+        isNew: boolean;
+        thumbnail: string;
+        instructor: string;
+        featured: boolean;
+        bestseller: boolean;
+      };
+    }>,
+    reply: FastifyReply,
+  ) {
+    try {
+      const {
+        title,
+        description,
+        categoryId,
+        difficulty,
+        price,
+        isFeatured,
+        isBestseller,
+        isNew,
+        thumbnail,
+        instructor,
+      } = request.body;
+
+      // Prepare course data
+      const courseData = {
+        title,
+        description,
+        categoryId,
+        difficulty: difficulty || 'beginner',
+        price,
+        featured: isFeatured,
+        bestseller: isBestseller,
+        isNew,
+        thumbnail,
+        instructor: instructor || 'Default Instructor',
+        totalLessons: 0,
+      };
+
+      // Use the existing createCourse service method
+      const course = await this.courseService.createCourse(courseData);
+      reply.code(201).send(course);
+    } catch (error: unknown) {
+      console.error('Error saving course:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to save course', details: errorMessage });
     }
   }
 
@@ -117,8 +176,9 @@ export class CourseController {
       }
 
       reply.send(updatedCourse);
-    } catch (error: any) {
-      reply.code(400).send({ error: 'Failed to update course', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to update course', details: errorMessage });
     }
   }
 
@@ -142,8 +202,9 @@ export class CourseController {
       }
 
       reply.code(204).send();
-    } catch (error: any) {
-      reply.code(400).send({ error: 'Failed to delete course', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to delete course', details: errorMessage });
     }
   }
 
@@ -170,8 +231,9 @@ export class CourseController {
 
       const modules = await this.courseService.getCourseModules(courseId);
       reply.send(modules);
-    } catch (error) {
-      reply.code(400).send({ error: 'Failed to get course modules', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to get course modules', details: errorMessage });
     }
   }
 
@@ -185,8 +247,9 @@ export class CourseController {
       const moduleData = request.body;
       const createdModule = await this.courseService.createModule(moduleData);
       reply.code(201).send(createdModule);
-    } catch (error) {
-      reply.code(400).send({ error: 'Failed to create module', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to create module', details: errorMessage });
     }
   }
 
@@ -212,8 +275,9 @@ export class CourseController {
       }
 
       reply.send(updatedModule);
-    } catch (error) {
-      reply.code(400).send({ error: 'Failed to update module', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to update module', details: errorMessage });
     }
   }
 
@@ -237,8 +301,9 @@ export class CourseController {
       }
 
       reply.code(204).send();
-    } catch (error) {
-      reply.code(400).send({ error: 'Failed to delete module', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to delete module', details: errorMessage });
     }
   }
 
@@ -253,8 +318,9 @@ export class CourseController {
       const lessonData = request.body;
       const createdLesson = await this.courseService.createLesson(lessonData);
       reply.code(201).send(createdLesson);
-    } catch (error) {
-      reply.code(400).send({ error: 'Failed to create lesson', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to create lesson', details: errorMessage });
     }
   }
 
@@ -280,8 +346,9 @@ export class CourseController {
       }
 
       reply.send(updatedLesson);
-    } catch (error) {
-      reply.code(400).send({ error: 'Failed to update lesson', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to update lesson', details: errorMessage });
     }
   }
 
@@ -305,8 +372,9 @@ export class CourseController {
       }
 
       reply.code(204).send();
-    } catch (error) {
-      reply.code(400).send({ error: 'Failed to delete lesson', details: error.message });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to delete lesson', details: errorMessage });
     }
   }
 }
