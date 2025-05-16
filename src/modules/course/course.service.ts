@@ -452,32 +452,39 @@ export class CourseService {
   ): Promise<Lesson | null> {
     // First check if the module exists
     const module = await this.moduleModel.findOne({ id: moduleId });
-    if (!module) {
-      throw new Error(`Module with id ${moduleId} not found`);
-    }
+    if (!module) return null;
 
-    // Then update the lesson, ensuring it belongs to the specified module
-    const lesson = await this.lessonModel.findOneAndUpdate(
-      { id: lessonId, moduleId },
+    // Then check if the lesson exists and belongs to this module
+    const lesson = await this.lessonModel.findOne({ id: lessonId, moduleId });
+    if (!lesson) return null;
+
+    // Update the lesson
+    const updatedLesson = await this.lessonModel.findOneAndUpdate(
+      { id: lessonId },
       { $set: lessonData },
       { new: true },
     );
 
-    if (!lesson) {
-      return null; // Lesson not found or doesn't belong to the module
-    }
+    return updatedLesson;
+  }
 
-    return {
-      id: lesson.id,
-      title: lesson.title,
-      moduleId: lesson.moduleId,
-      courseId: lesson.courseId,
-      videoUrl: lesson.videoUrl,
-      content: lesson.content,
-      duration: lesson.duration,
-      order: lesson.order,
-      type: lesson.videoUrl ? 'Video' : 'Text',
-    };
+  // Add a new method to get a lesson by course, module, and lesson IDs
+  async getLessonByPath(
+    courseId: number,
+    moduleId: number,
+    lessonId: number,
+  ): Promise<Lesson | null> {
+    // First check if the course exists
+    const course = await this.courseModel.findOne({ id: courseId });
+    if (!course) return null;
+
+    // Then check if the module exists and belongs to this course
+    const module = await this.moduleModel.findOne({ id: moduleId, courseId });
+    if (!module) return null;
+
+    // Finally check if the lesson exists and belongs to this module
+    const lesson = await this.lessonModel.findOne({ id: lessonId, moduleId });
+    return lesson;
   }
 
   private convertToCourse(courseDoc: CourseDocument): Course {

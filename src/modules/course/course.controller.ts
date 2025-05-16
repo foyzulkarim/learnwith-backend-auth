@@ -482,9 +482,37 @@ export class CourseController {
       reply.send(curriculum);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply
-        .code(error instanceof Error && error.message.includes('not found') ? 404 : 400)
-        .send({ error: 'Failed to get curriculum', details: errorMessage });
+      reply.code(400).send({ error: 'Failed to get curriculum', details: errorMessage });
+    }
+  }
+
+  // Add new handler for getting a lesson by path
+  async getLessonByPathHandler(
+    request: FastifyRequest<{
+      Params: { courseId: string; moduleId: string; lessonId: string };
+    }>,
+    reply: FastifyReply,
+  ) {
+    try {
+      const courseId = parseInt(request.params.courseId, 10);
+      const moduleId = parseInt(request.params.moduleId, 10);
+      const lessonId = parseInt(request.params.lessonId, 10);
+
+      // Validate IDs
+      if (isNaN(courseId) || isNaN(moduleId) || isNaN(lessonId)) {
+        return reply.code(400).send({ error: 'Invalid ID parameters' });
+      }
+
+      const lesson = await this.courseService.getLessonByPath(courseId, moduleId, lessonId);
+
+      if (!lesson) {
+        return reply.code(404).send({ error: 'Lesson not found' });
+      }
+
+      reply.send(lesson);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(500).send({ error: 'Failed to get lesson', details: errorMessage });
     }
   }
 }

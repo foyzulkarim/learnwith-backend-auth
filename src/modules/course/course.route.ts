@@ -53,4 +53,10 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     '/:courseId/curriculum',
     courseController.getCurriculumHandler.bind(courseController),
   );
+
+  // New route for getting a specific lesson by path
+  fastify.get(
+    '/:courseId/modules/:moduleId/lessons/:lessonId',
+    courseController.getLessonByPathHandler.bind(courseController),
+  );
 }
