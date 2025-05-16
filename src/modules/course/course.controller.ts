@@ -377,4 +377,114 @@ export class CourseController {
       reply.code(400).send({ error: 'Failed to delete lesson', details: errorMessage });
     }
   }
+
+  // Handler for saving curriculum (modules and lessons together)
+  async saveCurriculumHandler(
+    request: FastifyRequest<{
+      Params: { courseId?: string };
+      Body: {
+        courseId?: number | null;
+        modules: {
+          id: number;
+          title: string;
+          order: number;
+          lessons: {
+            id: number;
+            title: string;
+            order: number;
+            videoUrl: string;
+            content: string;
+            duration: string;
+          }[];
+        }[];
+      };
+    }>,
+    reply: FastifyReply,
+  ) {
+    try {
+      // Extract courseId from URL path if present, otherwise use the one from request body
+      let courseId = request.body.courseId;
+
+      // If courseId is in the path params, use that (it will override the body value)
+      if (request.params.courseId) {
+        const pathCourseId = parseInt(request.params.courseId, 10);
+        if (!isNaN(pathCourseId)) {
+          courseId = pathCourseId;
+        }
+      }
+
+      const { modules } = request.body;
+
+      if (!modules || !Array.isArray(modules)) {
+        return reply.code(400).send({ error: 'Invalid modules data' });
+      }
+
+      const result = await this.courseService.saveCurriculum(courseId, modules);
+      reply.code(200).send(result);
+    } catch (error: unknown) {
+      console.error('Error saving curriculum:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply.code(400).send({ error: 'Failed to save curriculum', details: errorMessage });
+    }
+  }
+
+  // Update a specific lesson within a module
+  async updateModuleLessonHandler(
+    request: FastifyRequest<{
+      Params: { moduleId: string; lessonId: string };
+      Body: Partial<Lesson>;
+    }>,
+    reply: FastifyReply,
+  ) {
+    try {
+      const moduleId = parseInt(request.params.moduleId, 10);
+      const lessonId = parseInt(request.params.lessonId, 10);
+
+      if (isNaN(moduleId) || isNaN(lessonId)) {
+        return reply.code(400).send({ error: 'Invalid module ID or lesson ID' });
+      }
+
+      const lessonData = request.body;
+      const updatedLesson = await this.courseService.updateModuleLesson(
+        moduleId,
+        lessonId,
+        lessonData,
+      );
+
+      if (!updatedLesson) {
+        return reply.code(404).send({ error: 'Lesson not found in the specified module' });
+      }
+
+      reply.send(updatedLesson);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply
+        .code(error instanceof Error && error.message.includes('not found') ? 404 : 400)
+        .send({ error: 'Failed to update lesson', details: errorMessage });
+    }
+  }
+
+  // Get the full curriculum for a course
+  async getCurriculumHandler(
+    request: FastifyRequest<{
+      Params: { courseId: string };
+    }>,
+    reply: FastifyReply,
+  ) {
+    try {
+      const courseId = parseInt(request.params.courseId, 10);
+
+      if (isNaN(courseId)) {
+        return reply.code(400).send({ error: 'Invalid course ID' });
+      }
+
+      const curriculum = await this.courseService.getCurriculum(courseId);
+      reply.send(curriculum);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      reply
+        .code(error instanceof Error && error.message.includes('not found') ? 404 : 400)
+        .send({ error: 'Failed to get curriculum', details: errorMessage });
+    }
+  }
 }

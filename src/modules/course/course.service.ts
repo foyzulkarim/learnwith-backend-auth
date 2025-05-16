@@ -268,6 +268,218 @@ export class CourseService {
     return result.deletedCount > 0;
   }
 
+  // New method for saving curriculum (modules and lessons together)
+  async saveCurriculum(
+    courseId: number | null,
+    modules: {
+      id: number;
+      title: string;
+      order: number;
+      lessons: {
+        id: number;
+        title: string;
+        order: number;
+        videoUrl: string;
+        content: string;
+        duration: string;
+      }[];
+    }[],
+  ) {
+    // Validate courseId if provided
+    if (courseId !== null) {
+      const course = await this.courseModel.findOne({ id: courseId });
+      if (!course) {
+        throw new Error(`Course with id ${courseId} not found`);
+      }
+    }
+
+    const savedModules = [];
+
+    // Process each module
+    for (const moduleData of modules) {
+      let moduleId = moduleData.id;
+      let module;
+
+      // Check if module exists
+      const existingModule = await this.moduleModel.findOne({ id: moduleId });
+
+      if (existingModule) {
+        // Update existing module
+        module = await this.moduleModel.findOneAndUpdate(
+          { id: moduleId },
+          {
+            title: moduleData.title,
+            order: moduleData.order,
+          },
+          { new: true },
+        );
+      } else {
+        // Create new module
+        const lastModule = await this.moduleModel.findOne().sort({ id: -1 }).exec();
+        moduleId = lastModule ? lastModule.id + 1 : 1;
+
+        module = await this.moduleModel.create({
+          id: moduleId,
+          title: moduleData.title,
+          courseId: courseId || 0, // If courseId is null, use 0 temporarily
+          order: moduleData.order,
+        });
+      }
+
+      const savedLessons = [];
+
+      // Process each lesson in the module
+      for (const lessonData of moduleData.lessons) {
+        let lessonId = lessonData.id;
+        let lesson;
+
+        // Check if lesson exists
+        const existingLesson = await this.lessonModel.findOne({ id: lessonId });
+
+        if (existingLesson) {
+          // Update existing lesson
+          lesson = await this.lessonModel.findOneAndUpdate(
+            { id: lessonId },
+            {
+              title: lessonData.title,
+              videoUrl: lessonData.videoUrl,
+              content: lessonData.content,
+              duration: lessonData.duration,
+              order: lessonData.order,
+            },
+            { new: true },
+          );
+        } else {
+          // Create new lesson
+          const lastLesson = await this.lessonModel.findOne().sort({ id: -1 }).exec();
+          lessonId = lastLesson ? lastLesson.id + 1 : 1;
+
+          lesson = await this.lessonModel.create({
+            id: lessonId,
+            title: lessonData.title,
+            moduleId: moduleId,
+            courseId: courseId || 0, // If courseId is null, use 0 temporarily
+            videoUrl: lessonData.videoUrl || '',
+            content: lessonData.content || '',
+            duration: lessonData.duration || '00:00',
+            order: lessonData.order,
+          });
+        }
+
+        savedLessons.push({
+          id: lesson.id,
+          title: lesson.title,
+          order: lesson.order,
+          videoUrl: lesson.videoUrl,
+          content: lesson.content,
+          duration: lesson.duration,
+        });
+      }
+
+      savedModules.push({
+        id: module.id,
+        title: module.title,
+        order: module.order,
+        lessons: savedLessons,
+      });
+    }
+
+    // Update course totalLessons count if courseId is provided
+    if (courseId) {
+      const totalLessons = await this.lessonModel.countDocuments({ courseId });
+      await this.courseModel.updateOne({ id: courseId }, { totalLessons });
+    }
+
+    return {
+      courseId,
+      modules: savedModules,
+    };
+  }
+
+  async getCurriculum(courseId: number) {
+    // Validate course exists
+    const course = await this.courseModel.findOne({ id: courseId });
+    if (!course) {
+      throw new Error(`Course with id ${courseId} not found`);
+    }
+
+    // Get all modules for the course ordered by their order field
+    const modules = await this.moduleModel.find({ courseId }).sort({ order: 1 }).exec();
+
+    // For each module, get its lessons
+    const modulesWithLessons = [];
+    for (const module of modules) {
+      // Get lessons for this module ordered by their order field
+      const lessons = await this.lessonModel
+        .find({ moduleId: module.id })
+        .sort({ order: 1 })
+        .exec();
+
+      // Format the lessons to include necessary info
+      const formattedLessons = lessons.map((lesson) => ({
+        id: lesson.id,
+        title: lesson.title,
+        moduleId: lesson.moduleId,
+        courseId: lesson.courseId,
+        videoUrl: lesson.videoUrl,
+        content: lesson.content,
+        duration: lesson.duration,
+        order: lesson.order,
+        type: lesson.videoUrl ? 'Video' : 'Text', // Determine type based on if video URL exists
+      }));
+
+      // Add module with its lessons to the result
+      modulesWithLessons.push({
+        id: module.id,
+        title: module.title,
+        courseId: module.courseId,
+        order: module.order,
+        lessons: formattedLessons,
+        lessonCount: formattedLessons.length,
+      });
+    }
+
+    return {
+      courseId,
+      modules: modulesWithLessons,
+    };
+  }
+
+  async updateModuleLesson(
+    moduleId: number,
+    lessonId: number,
+    lessonData: Partial<Lesson>,
+  ): Promise<Lesson | null> {
+    // First check if the module exists
+    const module = await this.moduleModel.findOne({ id: moduleId });
+    if (!module) {
+      throw new Error(`Module with id ${moduleId} not found`);
+    }
+
+    // Then update the lesson, ensuring it belongs to the specified module
+    const lesson = await this.lessonModel.findOneAndUpdate(
+      { id: lessonId, moduleId },
+      { $set: lessonData },
+      { new: true },
+    );
+
+    if (!lesson) {
+      return null; // Lesson not found or doesn't belong to the module
+    }
+
+    return {
+      id: lesson.id,
+      title: lesson.title,
+      moduleId: lesson.moduleId,
+      courseId: lesson.courseId,
+      videoUrl: lesson.videoUrl,
+      content: lesson.content,
+      duration: lesson.duration,
+      order: lesson.order,
+      type: lesson.videoUrl ? 'Video' : 'Text',
+    };
+  }
+
   private convertToCourse(courseDoc: CourseDocument): Course {
     const course = courseDoc.toObject();
     return {

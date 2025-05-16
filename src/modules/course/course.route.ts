@@ -19,6 +19,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
   fastify.post('/', courseController.createCourseHandler.bind(courseController));
   fastify.post('/save', courseController.saveCourseHandler.bind(courseController));
   fastify.patch('/:courseId', courseController.updateCourseHandler.bind(courseController));
+  fastify.put('/:courseId', courseController.updateCourseHandler.bind(courseController));
   fastify.delete('/:courseId', courseController.deleteCourseHandler.bind(courseController));
 
   // Module CRUD
@@ -34,4 +35,22 @@ export default async function courseRoutes(fastify: FastifyInstance) {
   fastify.post('/lessons', courseController.createLessonHandler.bind(courseController));
   fastify.patch('/lessons/:lessonId', courseController.updateLessonHandler.bind(courseController));
   fastify.delete('/lessons/:lessonId', courseController.deleteLessonHandler.bind(courseController));
+  // Update a lesson within a specific module
+  fastify.patch(
+    '/modules/:moduleId/lessons/:lessonId',
+    courseController.updateModuleLessonHandler.bind(courseController),
+  );
+
+  // Curriculum
+  fastify.post('/curriculum/save', courseController.saveCurriculumHandler.bind(courseController));
+  // Add the new endpoint for saving curriculum with courseId in path
+  fastify.post(
+    '/:courseId/curriculum',
+    courseController.saveCurriculumHandler.bind(courseController),
+  );
+  // Get curriculum for a course
+  fastify.get(
+    '/:courseId/curriculum',
+    courseController.getCurriculumHandler.bind(courseController),
+  );
 }

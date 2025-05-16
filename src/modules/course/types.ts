@@ -36,6 +36,7 @@ export interface Module {
   courseId: number;
   order: number;
   lessons?: Lesson[];
+  lessonCount?: number;
 }
 
 export interface Lesson {
@@ -47,4 +48,10 @@ export interface Lesson {
   content: string;
   duration: string;
   order: number;
+  type?: 'Video' | 'Text' | 'Quiz' | 'Assignment';
+}
+
+export interface Curriculum {
+  courseId: number;
+  modules: Module[];
 }
