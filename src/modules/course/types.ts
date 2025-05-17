@@ -1,28 +1,29 @@
 export interface Course {
-  id: number;
+  _id: string;
   title: string;
   description: string;
-  thumbnail: string;
+  thumbnailUrl: string;
   instructor: string;
   instructorAvatar?: string;
   price?: string;
   rating?: string;
-  categoryId: number;
+  category: string;
   difficulty: string;
-  featured?: boolean;
-  bestseller?: boolean;
-  isNew?: boolean;
+  featured: boolean;
+  bestseller: boolean;
+  newCourse: boolean;
   totalLessons: number;
   totalDuration?: string;
   lastUpdated?: string;
-  language?: string;
+  language: string;
   captions?: string[];
-  studentCount?: number;
+  studentCount: number;
   completedLessons?: number;
   progress?: number;
   status?: string;
   publishedAt?: string;
   completionRate?: number;
+  modules: Module[];
 }
 
 export interface Category {
@@ -31,27 +32,91 @@ export interface Category {
 }
 
 export interface Module {
-  id: number;
+  _id: string;
   title: string;
-  courseId: number;
   order: number;
-  lessons?: Lesson[];
-  lessonCount?: number;
+  lessons: Lesson[];
 }
 
 export interface Lesson {
-  id: number;
+  _id: string;
   title: string;
-  moduleId: number;
-  courseId: number;
   videoUrl: string;
   content: string;
   duration: string;
   order: number;
-  type?: 'Video' | 'Text' | 'Quiz' | 'Assignment';
 }
 
 export interface Curriculum {
   courseId: number;
   modules: Module[];
+}
+
+// Request payloads
+export interface CreateCoursePayload {
+  title: string;
+  description: string;
+  thumbnailUrl: string;
+  instructor: string;
+  instructorAvatar?: string;
+  price?: string;
+  category: string;
+  difficulty: string;
+  featured?: boolean;
+  bestseller?: boolean;
+  newCourse?: boolean;
+  language?: string;
+}
+
+export interface UpdateCoursePayload {
+  title?: string;
+  description?: string;
+  thumbnailUrl?: string;
+  instructor?: string;
+  instructorAvatar?: string;
+  price?: string;
+  category?: string;
+  difficulty?: string;
+  featured?: boolean;
+  bestseller?: boolean;
+  newCourse?: boolean;
+  language?: string;
+}
+
+export interface CreateModulePayload {
+  title: string;
+  order: number;
+}
+
+export interface UpdateModulePayload {
+  title?: string;
+  order?: number;
+}
+
+export interface CreateLessonPayload {
+  title: string;
+  videoUrl?: string;
+  content?: string;
+  duration?: string;
+  order: number;
+}
+
+export interface UpdateLessonPayload {
+  title?: string;
+  videoUrl?: string;
+  content?: string;
+  duration?: string;
+  order?: number;
+}
+
+// Response interfaces
+export interface PaginatedCourseResponse {
+  courses: Course[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface SuccessResponse {
+  success: boolean;
 }

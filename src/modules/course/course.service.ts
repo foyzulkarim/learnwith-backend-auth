@@ -1,54 +1,48 @@
 import { FastifyInstance } from 'fastify';
-import { getCourseModel, CourseDocument, getModuleModel, getLessonModel } from './course.model';
-import { Course, Category, Module, Lesson } from './types';
-
-interface CourseFilters {
-  search?: string;
-  categoryId?: number;
-  limit?: number;
-}
+import { getCourseModel, CourseDocument, CourseHelpers } from './course.model';
+import {
+  Course,
+  CreateCoursePayload,
+  UpdateCoursePayload,
+  CreateModulePayload,
+  UpdateModulePayload,
+  CreateLessonPayload,
+  UpdateLessonPayload,
+} from './types';
+import { NotFoundError } from '../../utils/errors';
 
 export class CourseService {
   private courseModel;
-  private moduleModel;
-  private lessonModel;
 
   constructor(private fastify: FastifyInstance) {
     this.courseModel = getCourseModel();
-    this.moduleModel = getModuleModel();
-    this.lessonModel = getLessonModel();
   }
 
-  async getAllCourses(filters?: CourseFilters): Promise<Course[]> {
-    const query: any = {};
+  async getAllCourses(page: number = 1, limit: number = 10) {
+    // Calculate skip value for pagination
+    const skip = (page - 1) * limit;
 
-    // Apply filters if provided
-    if (filters) {
-      if (filters.search) {
-        // Case-insensitive search on title
-        query.title = { $regex: filters.search, $options: 'i' };
-      }
+    // Get total count for pagination
+    const total = await this.courseModel.countDocuments();
 
-      if (filters.categoryId) {
-        query.categoryId = filters.categoryId;
-      }
-    }
+    // Get courses with pagination
+    const courses = await this.courseModel
+      .find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
-    let coursesQuery = this.courseModel.find(query);
-
-    // Apply limit if provided
-    if (filters?.limit) {
-      coursesQuery = coursesQuery.limit(filters.limit);
-    }
-
-    const courses = await coursesQuery.exec();
-    return courses.map(this.convertToCourse);
+    return {
+      courses: courses as Course[],
+      total,
+    };
   }
 
-  async getCourseById(courseId: number): Promise<Course | null> {
-    const course = await this.courseModel.findOne({ id: courseId });
+  async getCourseById(courseId: string): Promise<Course | null> {
+    const course = await this.courseModel.findById(courseId).lean();
     if (!course) return null;
-    return this.convertToCourse(course);
+    return course as Course;
   }
 
   async getCourseLessons(courseId: number): Promise<Lesson[]> {
@@ -68,204 +62,125 @@ export class CourseService {
     ];
   }
 
-  // Course CRUD operations
-  async createCourse(courseData: Omit<Course, 'id'>): Promise<Course> {
-    console.log('Creating course with data:', JSON.stringify(courseData, null, 2));
-
-    // Generate a new course ID
-    const lastCourse = await this.courseModel.findOne().sort({ id: -1 }).exec();
-    const newId = lastCourse ? lastCourse.id + 1 : 1;
-
-    // Create the course with defaults for required fields
-    const courseToCreate = {
+  async createCourse(courseData: CreateCoursePayload): Promise<Course> {
+    const course = await this.courseModel.create({
       ...courseData,
-      id: newId,
-      totalLessons: courseData.totalLessons || 0,
-      instructor: courseData.instructor || 'Course Instructor',
-      newCourse: courseData.isNew, // Map isNew to newCourse for database
-      // Ensure required fields have defaults
-      difficulty: courseData.difficulty || 'beginner',
-      thumbnail: courseData.thumbnail || 'https://placeholder.com/400x300',
-    };
+      modules: [],
+      totalLessons: 0,
+      studentCount: 0,
+      // Set default values for any missing fields
+      featured: courseData.featured || false,
+      bestseller: courseData.bestseller || false,
+      newCourse: courseData.newCourse || false,
+      language: courseData.language || 'English',
+    });
 
-    console.log('Course to save:', JSON.stringify(courseToCreate, null, 2));
-    try {
-      const created = await this.courseModel.create(courseToCreate);
-      console.log('Course created successfully:', created.id);
-      return this.convertToCourse(created);
-    } catch (error) {
-      console.error('Error creating course:', error);
-      throw error;
-    }
+    return course.toObject() as Course;
   }
 
-  async updateCourse(courseId: number, courseData: Partial<Course>): Promise<Course | null> {
-    // Map isNew to newCourse for database if it's included
-    const dataToUpdate: any = { ...courseData };
-    if ('isNew' in dataToUpdate) {
-      dataToUpdate.newCourse = dataToUpdate.isNew;
-      delete dataToUpdate.isNew;
-    }
-
-    const course = await this.courseModel.findOneAndUpdate(
-      { id: courseId },
-      { $set: dataToUpdate },
-      { new: true },
-    );
+  async updateCourse(courseId: string, courseData: UpdateCoursePayload): Promise<Course | null> {
+    const course = await this.courseModel
+      .findByIdAndUpdate(courseId, { $set: courseData }, { new: true, runValidators: true })
+      .lean();
 
     if (!course) return null;
-    return this.convertToCourse(course);
+    return course as Course;
   }
 
-  async deleteCourse(courseId: number): Promise<boolean> {
-    const result = await this.courseModel.deleteOne({ id: courseId });
-
-    // Also delete all modules and lessons associated with this course
-    await this.moduleModel.deleteMany({ courseId });
-    await this.lessonModel.deleteMany({ courseId });
-
-    return result.deletedCount > 0;
+  async deleteCourse(courseId: string): Promise<boolean> {
+    const result = await this.courseModel.findByIdAndDelete(courseId);
+    return !!result;
   }
 
-  // Module operations
-  async getCourseModules(courseId: number): Promise<Module[]> {
-    const modules = await this.moduleModel.find({ courseId }).sort({ order: 1 }).exec();
+  // Curriculum methods
+  async getCurriculum(courseId: string) {
+    const course = await this.courseModel.findById(courseId).lean();
+    if (!course) return null;
 
-    // For each module, fetch its lessons
-    const modulesWithLessons = await Promise.all(
-      modules.map(async (module) => {
-        const lessons = await this.lessonModel
-          .find({ moduleId: module.id })
-          .sort({ order: 1 })
-          .exec();
-        return {
-          id: module.id,
-          title: module.title,
-          courseId: module.courseId,
-          order: module.order,
-          lessons,
+    // Handle the case where modules may be empty or undefined
+    const modules = course.modules || [];
+
+    // Sort modules by order if they exist
+    const sortedModules = [...modules]
+      .map((module: any) => {
+        // Make sure we're transforming _id to a string format needed by the frontend
+        const moduleWithFormattedId = {
+          ...module,
+          _id: module._id.toString(),
+          lessons: Array.isArray(module.lessons)
+            ? module.lessons
+                .map((lesson: any) => ({
+                  ...lesson,
+                  _id: lesson._id.toString(),
+                  moduleId: module._id.toString(),
+                  isCompleted: false, // Default value
+                }))
+                .sort((a: any, b: any) => a.order - b.order)
+            : [],
         };
-      }),
-    );
 
-    return modulesWithLessons;
+        return moduleWithFormattedId;
+      })
+      .sort((a: any, b: any) => a.order - b.order);
+
+    return { courseId, modules: sortedModules };
   }
 
-  async createModule(moduleData: Omit<Module, 'id'>): Promise<Module> {
-    // Generate a new module ID
-    const lastModule = await this.moduleModel.findOne().sort({ id: -1 }).exec();
-    const newId = lastModule ? lastModule.id + 1 : 1;
-
-    const created = await this.moduleModel.create({
-      ...moduleData,
-      id: newId,
-    });
-
-    return {
-      id: created.id,
-      title: created.title,
-      courseId: created.courseId,
-      order: created.order,
-      lessons: [],
-    };
-  }
-
-  async updateModule(moduleId: number, moduleData: Partial<Module>): Promise<Module | null> {
-    // Make sure to not update lessons through this method
-    const { lessons: _, ...dataToUpdate } = moduleData;
-
-    const module = await this.moduleModel.findOneAndUpdate(
-      { id: moduleId },
-      { $set: dataToUpdate },
-      { new: true },
-    );
-
+  // Module methods
+  async getModule(courseId: string, moduleId: string) {
+    const module = await CourseHelpers.getModule(courseId, moduleId);
     if (!module) return null;
-
-    // Get the lessons for this module
-    const lessonsList = await this.lessonModel.find({ moduleId }).sort({ order: 1 }).exec();
-
-    return {
-      id: module.id,
-      title: module.title,
-      courseId: module.courseId,
-      order: module.order,
-      lessons: lessonsList,
-    };
+    return module;
   }
 
-  async deleteModule(moduleId: number): Promise<boolean> {
-    const result = await this.moduleModel.deleteOne({ id: moduleId });
-
-    // Also delete all lessons in this module
-    await this.lessonModel.deleteMany({ moduleId });
-
-    return result.deletedCount > 0;
+  async createModule(courseId: string, moduleData: CreateModulePayload) {
+    const newModule = await CourseHelpers.addModule(courseId, moduleData);
+    if (!newModule) throw new NotFoundError('Failed to create module');
+    return newModule;
   }
 
-  // Lesson operations
-  async createLesson(lessonData: Omit<Lesson, 'id'>): Promise<Lesson> {
-    // Generate a new lesson ID
-    const lastLesson = await this.lessonModel.findOne().sort({ id: -1 }).exec();
-    const newId = lastLesson ? lastLesson.id + 1 : 1;
-
-    const created = await this.lessonModel.create({
-      ...lessonData,
-      id: newId,
-    });
-
-    // Update the course's totalLessons count
-    await this.courseModel.updateOne({ id: lessonData.courseId }, { $inc: { totalLessons: 1 } });
-
-    return {
-      id: created.id,
-      title: created.title,
-      moduleId: created.moduleId,
-      courseId: created.courseId,
-      videoUrl: created.videoUrl,
-      content: created.content,
-      duration: created.duration,
-      order: created.order,
-    };
+  async updateModule(courseId: string, moduleId: string, moduleData: UpdateModulePayload) {
+    const updatedModule = await CourseHelpers.updateModule(courseId, moduleId, moduleData);
+    if (!updatedModule) return null;
+    return updatedModule;
   }
 
-  async updateLesson(lessonId: number, lessonData: Partial<Lesson>): Promise<Lesson | null> {
-    const lesson = await this.lessonModel.findOneAndUpdate(
-      { id: lessonId },
-      { $set: lessonData },
-      { new: true },
-    );
+  async deleteModule(courseId: string, moduleId: string): Promise<boolean> {
+    return CourseHelpers.deleteModule(courseId, moduleId);
+  }
 
+  // Lesson methods
+  async getLesson(courseId: string, moduleId: string, lessonId: string) {
+    console.log('Fetching lesson:', { lessonId, moduleId, courseId });
+    const lesson = await CourseHelpers.getLesson(courseId, moduleId, lessonId);
     if (!lesson) return null;
-
-    return {
-      id: lesson.id,
-      title: lesson.title,
-      moduleId: lesson.moduleId,
-      courseId: lesson.courseId,
-      videoUrl: lesson.videoUrl,
-      content: lesson.content,
-      duration: lesson.duration,
-      order: lesson.order,
-    };
+    return lesson;
   }
 
-  async deleteLesson(lessonId: number): Promise<boolean> {
-    // Get the lesson's course ID before deleting
-    const lesson = await this.lessonModel.findOne({ id: lessonId });
-    if (!lesson) return false;
+  async createLesson(courseId: string, moduleId: string, lessonData: CreateLessonPayload) {
+    const newLesson = await CourseHelpers.addLesson(courseId, moduleId, lessonData);
+    if (!newLesson) throw new NotFoundError('Failed to create lesson');
+    return newLesson;
+  }
 
-    const courseId = lesson.courseId;
+  async updateLesson(
+    courseId: string,
+    moduleId: string,
+    lessonId: string,
+    lessonData: UpdateLessonPayload,
+  ) {
+    const updatedLesson = await CourseHelpers.updateLesson(
+      courseId,
+      moduleId,
+      lessonId,
+      lessonData,
+    );
+    if (!updatedLesson) return null;
+    return updatedLesson;
+  }
 
-    // Delete the lesson
-    const result = await this.lessonModel.deleteOne({ id: lessonId });
-
-    // Update the course's totalLessons count
-    if (result.deletedCount > 0) {
-      await this.courseModel.updateOne({ id: courseId }, { $inc: { totalLessons: -1 } });
-    }
-
-    return result.deletedCount > 0;
+  async deleteLesson(courseId: string, moduleId: string, lessonId: string): Promise<boolean> {
+    return CourseHelpers.deleteLesson(courseId, moduleId, lessonId);
   }
 
   // New method for saving curriculum (modules and lessons together)
@@ -396,54 +311,8 @@ export class CourseService {
     };
   }
 
-  async getCurriculum(courseId: number) {
-    // Validate course exists
-    const course = await this.courseModel.findOne({ id: courseId });
-    if (!course) {
-      throw new Error(`Course with id ${courseId} not found`);
-    }
-
-    // Get all modules for the course ordered by their order field
-    const modules = await this.moduleModel.find({ courseId }).sort({ order: 1 }).exec();
-
-    // For each module, get its lessons
-    const modulesWithLessons = [];
-    for (const module of modules) {
-      // Get lessons for this module ordered by their order field
-      const lessons = await this.lessonModel
-        .find({ moduleId: module.id })
-        .sort({ order: 1 })
-        .exec();
-
-      // Format the lessons to include necessary info
-      const formattedLessons = lessons.map((lesson) => ({
-        id: lesson.id,
-        title: lesson.title,
-        moduleId: lesson.moduleId,
-        courseId: lesson.courseId,
-        videoUrl: lesson.videoUrl,
-        content: lesson.content,
-        duration: lesson.duration,
-        order: lesson.order,
-        type: lesson.videoUrl ? 'Video' : 'Text', // Determine type based on if video URL exists
-      }));
-
-      // Add module with its lessons to the result
-      modulesWithLessons.push({
-        id: module.id,
-        title: module.title,
-        courseId: module.courseId,
-        order: module.order,
-        lessons: formattedLessons,
-        lessonCount: formattedLessons.length,
-      });
-    }
-
-    return {
-      courseId,
-      modules: modulesWithLessons,
-    };
-  }
+  // This method was removed as it was a duplicate of the getCurriculum method above
+  // that works with the embedded document structure rather than separate collections.
 
   async updateModuleLesson(
     moduleId: number,

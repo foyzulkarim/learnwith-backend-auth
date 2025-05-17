@@ -1,518 +1,301 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { CourseService } from './course.service';
-import { Course, Module, Lesson } from './types';
-
-interface CourseQueryParams {
-  search?: string;
-  categoryId?: string;
-  limit?: string;
-}
+import {
+  Course,
+  CreateCoursePayload,
+  UpdateCoursePayload,
+  CreateModulePayload,
+  UpdateModulePayload,
+  CreateLessonPayload,
+  UpdateLessonPayload,
+  PaginatedCourseResponse,
+  SuccessResponse,
+} from './types';
+import { NotFoundError, ValidationError } from '../../utils/errors';
+import { asyncHandler } from '../../utils/middleware';
 
 export class CourseController {
   constructor(private courseService: CourseService) {}
 
-  async getAllCoursesHandler(
-    request: FastifyRequest<{
-      Querystring: CourseQueryParams;
-    }>,
-    reply: FastifyReply,
-  ) {
-    const { search, categoryId, limit } = request.query;
+  // Course Handlers
 
-    // Parse query parameters
-    const filters = {
-      search: search,
-      categoryId: categoryId ? parseInt(categoryId, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-    };
+  // Get all courses
+  getAllCoursesHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Querystring: { page?: number; limit?: number } }>,
+      _reply: FastifyReply,
+    ): Promise<PaginatedCourseResponse> => {
+      const page = request.query.page || 1;
+      const limit = request.query.limit || 10;
 
-    const courses = await this.courseService.getAllCourses(filters);
-    reply.send(courses);
-  }
+      const result = await this.courseService.getAllCourses(page, limit);
 
-  async getCourseByIdHandler(
-    request: FastifyRequest<{
-      Params: { courseId: string };
-    }>,
-    reply: FastifyReply,
-  ) {
-    const courseId = parseInt(request.params.courseId, 10);
-
-    if (isNaN(courseId)) {
-      return reply.code(400).send({ error: 'Invalid course ID' });
-    }
-
-    const course = await this.courseService.getCourseById(courseId);
-
-    if (!course) {
-      return reply.code(404).send({ error: 'Course not found' });
-    }
-
-    reply.send(course);
-  }
-
-  async getCourseLessonsHandler(
-    request: FastifyRequest<{
-      Params: { courseId: string };
-    }>,
-    reply: FastifyReply,
-  ) {
-    const courseId = parseInt(request.params.courseId, 10);
-
-    if (isNaN(courseId)) {
-      return reply.code(400).send({ error: 'Invalid course ID' });
-    }
-
-    // Check if course exists
-    const course = await this.courseService.getCourseById(courseId);
-
-    if (!course) {
-      return reply.code(404).send({ error: 'Course not found' });
-    }
-
-    const lessons = await this.courseService.getCourseLessons(courseId);
-    reply.send(lessons);
-  }
-
-  async getCategoriesHandler(_request: FastifyRequest, reply: FastifyReply) {
-    const categories = await this.courseService.getCategories();
-    reply.send(categories);
-  }
-
-  // New handlers for course CRUD operations
-  async createCourseHandler(
-    request: FastifyRequest<{
-      Body: Omit<Course, 'id'>;
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const courseData = request.body;
-      const course = await this.courseService.createCourse(courseData);
-      reply.code(201).send(course);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to create course', details: errorMessage });
-    }
-  }
-
-  async saveCourseHandler(
-    request: FastifyRequest<{
-      Body: {
-        title: string;
-        description: string;
-        categoryId: number;
-        difficulty: string;
-        price: string;
-        isFeatured: boolean;
-        isBestseller: boolean;
-        isNew: boolean;
-        thumbnail: string;
-        instructor: string;
-        featured: boolean;
-        bestseller: boolean;
+      return {
+        courses: result.courses,
+        total: result.total,
+        page,
+        limit,
       };
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const {
-        title,
-        description,
-        categoryId,
-        difficulty,
-        price,
-        isFeatured,
-        isBestseller,
-        isNew,
-        thumbnail,
-        instructor,
-      } = request.body;
+    },
+  );
 
-      // Prepare course data
-      const courseData = {
-        title,
-        description,
-        categoryId,
-        difficulty: difficulty || 'beginner',
-        price,
-        featured: isFeatured,
-        bestseller: isBestseller,
-        isNew,
-        thumbnail,
-        instructor: instructor || 'Default Instructor',
-        totalLessons: 0,
-      };
+  // Get course by ID
+  getCourseByIdHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Params: { courseId: string } }>,
+      _reply: FastifyReply,
+    ): Promise<Course> => {
+      const course = await this.courseService.getCourseById(request.params.courseId);
 
-      // Use the existing createCourse service method
-      const course = await this.courseService.createCourse(courseData);
-      reply.code(201).send(course);
-    } catch (error: unknown) {
-      console.error('Error saving course:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to save course', details: errorMessage });
-    }
-  }
-
-  async updateCourseHandler(
-    request: FastifyRequest<{
-      Params: { courseId: string };
-      Body: Partial<Course>;
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const courseId = parseInt(request.params.courseId, 10);
-
-      if (isNaN(courseId)) {
-        return reply.code(400).send({ error: 'Invalid course ID' });
+      if (!course) {
+        throw new NotFoundError('Course not found');
       }
 
+      return course;
+    },
+  );
+
+  // Create course
+  createCourseHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Body: CreateCoursePayload }>,
+      _reply: FastifyReply,
+    ): Promise<Course> => {
       const courseData = request.body;
+
+      // Validate required fields
+      if (!courseData.title) throw new ValidationError('Title is required');
+      if (!courseData.description) throw new ValidationError('Description is required');
+      if (!courseData.thumbnailUrl) throw new ValidationError('Thumbnail is required');
+      if (!courseData.instructor) throw new ValidationError('Instructor is required');
+      if (!courseData.category) throw new ValidationError('Category is required');
+      if (!courseData.difficulty) throw new ValidationError('Difficulty is required');
+
+      const newCourse = await this.courseService.createCourse(courseData);
+
+      reply.code(201);
+      return newCourse;
+    },
+  );
+
+  // Update course
+  updateCourseHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Params: { courseId: string }; Body: UpdateCoursePayload }>,
+      _reply: FastifyReply,
+    ): Promise<Course> => {
+      const { courseId } = request.params;
+      const courseData = request.body;
+
       const updatedCourse = await this.courseService.updateCourse(courseId, courseData);
 
       if (!updatedCourse) {
-        return reply.code(404).send({ error: 'Course not found' });
+        throw new NotFoundError('Course not found');
       }
 
-      reply.send(updatedCourse);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to update course', details: errorMessage });
-    }
-  }
+      return updatedCourse;
+    },
+  );
 
-  async deleteCourseHandler(
-    request: FastifyRequest<{
-      Params: { courseId: string };
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const courseId = parseInt(request.params.courseId, 10);
+  // Delete course
+  deleteCourseHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Params: { courseId: string } }>,
+      _reply: FastifyReply,
+    ): Promise<SuccessResponse> => {
+      const { courseId } = request.params;
 
-      if (isNaN(courseId)) {
-        return reply.code(400).send({ error: 'Invalid course ID' });
+      const result = await this.courseService.deleteCourse(courseId);
+
+      if (!result) {
+        throw new NotFoundError('Course not found');
       }
 
-      const deleted = await this.courseService.deleteCourse(courseId);
+      return { success: true };
+    },
+  );
 
-      if (!deleted) {
-        return reply.code(404).send({ error: 'Course not found' });
+  // Curriculum Handlers
+
+  // Get course curriculum
+  getCurriculumHandler = asyncHandler(
+    async (request: FastifyRequest<{ Params: { courseId: string } }>, _reply: FastifyReply) => {
+      const { courseId } = request.params;
+
+      const curriculum = await this.courseService.getCurriculum(courseId);
+
+      if (!curriculum) {
+        throw new NotFoundError('Course not found');
       }
 
-      reply.code(204).send();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to delete course', details: errorMessage });
-    }
-  }
+      return curriculum;
+    },
+  );
 
-  // Module handlers
-  async getCourseModulesHandler(
-    request: FastifyRequest<{
-      Params: { courseId: string };
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const courseId = parseInt(request.params.courseId, 10);
+  // Module Handlers
 
-      if (isNaN(courseId)) {
-        return reply.code(400).send({ error: 'Invalid course ID' });
+  // Get module
+  getModuleHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Params: { courseId: string; moduleId: string } }>,
+      _reply: FastifyReply,
+    ) => {
+      const { courseId, moduleId } = request.params;
+
+      const module = await this.courseService.getModule(courseId, moduleId);
+
+      if (!module) {
+        throw new NotFoundError('Module not found');
       }
 
-      // Check if course exists
-      const course = await this.courseService.getCourseById(courseId);
+      return module;
+    },
+  );
 
-      if (!course) {
-        return reply.code(404).send({ error: 'Course not found' });
-      }
-
-      const modules = await this.courseService.getCourseModules(courseId);
-      reply.send(modules);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to get course modules', details: errorMessage });
-    }
-  }
-
-  async createModuleHandler(
-    request: FastifyRequest<{
-      Body: Omit<Module, 'id'>;
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
+  // Create module
+  createModuleHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Params: { courseId: string }; Body: CreateModulePayload }>,
+      _reply: FastifyReply,
+    ) => {
+      const { courseId } = request.params;
       const moduleData = request.body;
-      const createdModule = await this.courseService.createModule(moduleData);
-      reply.code(201).send(createdModule);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to create module', details: errorMessage });
-    }
-  }
 
-  async updateModuleHandler(
-    request: FastifyRequest<{
-      Params: { moduleId: string };
-      Body: Partial<Module>;
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const moduleId = parseInt(request.params.moduleId, 10);
+      // Validate required fields
+      if (!moduleData.title) throw new ValidationError('Title is required');
+      if (moduleData.order === undefined) throw new ValidationError('Order is required');
 
-      if (isNaN(moduleId)) {
-        return reply.code(400).send({ error: 'Invalid module ID' });
-      }
+      const newModule = await this.courseService.createModule(courseId, moduleData);
 
+      reply.code(201);
+      return newModule;
+    },
+  );
+
+  // Update module
+  updateModuleHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{
+        Params: { courseId: string; moduleId: string };
+        Body: UpdateModulePayload;
+      }>,
+      _reply: FastifyReply,
+    ) => {
+      const { courseId, moduleId } = request.params;
       const moduleData = request.body;
-      const updatedModule = await this.courseService.updateModule(moduleId, moduleData);
+
+      const updatedModule = await this.courseService.updateModule(courseId, moduleId, moduleData);
 
       if (!updatedModule) {
-        return reply.code(404).send({ error: 'Module not found' });
+        throw new NotFoundError('Module not found');
       }
 
-      reply.send(updatedModule);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to update module', details: errorMessage });
-    }
-  }
+      return updatedModule;
+    },
+  );
 
-  async deleteModuleHandler(
-    request: FastifyRequest<{
-      Params: { moduleId: string };
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const moduleId = parseInt(request.params.moduleId, 10);
+  // Delete module
+  deleteModuleHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Params: { courseId: string; moduleId: string } }>,
+      _reply: FastifyReply,
+    ): Promise<SuccessResponse> => {
+      const { courseId, moduleId } = request.params;
 
-      if (isNaN(moduleId)) {
-        return reply.code(400).send({ error: 'Invalid module ID' });
+      const result = await this.courseService.deleteModule(courseId, moduleId);
+
+      if (!result) {
+        throw new NotFoundError('Module not found');
       }
 
-      const deleted = await this.courseService.deleteModule(moduleId);
+      return { success: true };
+    },
+  );
 
-      if (!deleted) {
-        return reply.code(404).send({ error: 'Module not found' });
+  // Lesson Handlers
+
+  // Get lesson
+  getLessonHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Params: { courseId: string; moduleId: string; lessonId: string } }>,
+    ) => {
+      const { courseId, moduleId, lessonId } = request.params;
+
+      const lesson = await this.courseService.getLesson(courseId, moduleId, lessonId);
+
+      if (!lesson) {
+        throw new NotFoundError('Lesson not found');
       }
 
-      reply.code(204).send();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to delete module', details: errorMessage });
-    }
-  }
+      return lesson;
+    },
+  );
 
-  // Lesson handlers
-  async createLessonHandler(
-    request: FastifyRequest<{
-      Body: Omit<Lesson, 'id'>;
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
+  // Create lesson
+  createLessonHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{
+        Params: { courseId: string; moduleId: string };
+        Body: CreateLessonPayload;
+      }>,
+      _reply: FastifyReply,
+    ) => {
+      const { courseId, moduleId } = request.params;
       const lessonData = request.body;
-      const createdLesson = await this.courseService.createLesson(lessonData);
-      reply.code(201).send(createdLesson);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to create lesson', details: errorMessage });
-    }
-  }
 
-  async updateLessonHandler(
-    request: FastifyRequest<{
-      Params: { lessonId: string };
-      Body: Partial<Lesson>;
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const lessonId = parseInt(request.params.lessonId, 10);
+      // Validate required fields
+      if (!lessonData.title) throw new ValidationError('Title is required');
+      if (lessonData.order === undefined) throw new ValidationError('Order is required');
 
-      if (isNaN(lessonId)) {
-        return reply.code(400).send({ error: 'Invalid lesson ID' });
-      }
+      const newLesson = await this.courseService.createLesson(courseId, moduleId, lessonData);
 
+      reply.code(201);
+      return newLesson;
+    },
+  );
+
+  // Update lesson
+  updateLessonHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{
+        Params: { courseId: string; moduleId: string; lessonId: string };
+        Body: UpdateLessonPayload;
+      }>,
+      _reply: FastifyReply,
+    ) => {
+      const { courseId, moduleId, lessonId } = request.params;
       const lessonData = request.body;
-      const updatedLesson = await this.courseService.updateLesson(lessonId, lessonData);
 
-      if (!updatedLesson) {
-        return reply.code(404).send({ error: 'Lesson not found' });
-      }
-
-      reply.send(updatedLesson);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to update lesson', details: errorMessage });
-    }
-  }
-
-  async deleteLessonHandler(
-    request: FastifyRequest<{
-      Params: { lessonId: string };
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const lessonId = parseInt(request.params.lessonId, 10);
-
-      if (isNaN(lessonId)) {
-        return reply.code(400).send({ error: 'Invalid lesson ID' });
-      }
-
-      const deleted = await this.courseService.deleteLesson(lessonId);
-
-      if (!deleted) {
-        return reply.code(404).send({ error: 'Lesson not found' });
-      }
-
-      reply.code(204).send();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to delete lesson', details: errorMessage });
-    }
-  }
-
-  // Handler for saving curriculum (modules and lessons together)
-  async saveCurriculumHandler(
-    request: FastifyRequest<{
-      Params: { courseId?: string };
-      Body: {
-        courseId?: number | null;
-        modules: {
-          id: number;
-          title: string;
-          order: number;
-          lessons: {
-            id: number;
-            title: string;
-            order: number;
-            videoUrl: string;
-            content: string;
-            duration: string;
-          }[];
-        }[];
-      };
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      // Extract courseId from URL path if present, otherwise use the one from request body
-      let courseId = request.body.courseId;
-
-      // If courseId is in the path params, use that (it will override the body value)
-      if (request.params.courseId) {
-        const pathCourseId = parseInt(request.params.courseId, 10);
-        if (!isNaN(pathCourseId)) {
-          courseId = pathCourseId;
-        }
-      }
-
-      const { modules } = request.body;
-
-      if (!modules || !Array.isArray(modules)) {
-        return reply.code(400).send({ error: 'Invalid modules data' });
-      }
-
-      const result = await this.courseService.saveCurriculum(courseId, modules);
-      reply.code(200).send(result);
-    } catch (error: unknown) {
-      console.error('Error saving curriculum:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to save curriculum', details: errorMessage });
-    }
-  }
-
-  // Update a specific lesson within a module
-  async updateModuleLessonHandler(
-    request: FastifyRequest<{
-      Params: { moduleId: string; lessonId: string };
-      Body: Partial<Lesson>;
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const moduleId = parseInt(request.params.moduleId, 10);
-      const lessonId = parseInt(request.params.lessonId, 10);
-
-      if (isNaN(moduleId) || isNaN(lessonId)) {
-        return reply.code(400).send({ error: 'Invalid module ID or lesson ID' });
-      }
-
-      const lessonData = request.body;
-      const updatedLesson = await this.courseService.updateModuleLesson(
+      const updatedLesson = await this.courseService.updateLesson(
+        courseId,
         moduleId,
         lessonId,
         lessonData,
       );
 
       if (!updatedLesson) {
-        return reply.code(404).send({ error: 'Lesson not found in the specified module' });
+        throw new NotFoundError('Lesson not found');
       }
 
-      reply.send(updatedLesson);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply
-        .code(error instanceof Error && error.message.includes('not found') ? 404 : 400)
-        .send({ error: 'Failed to update lesson', details: errorMessage });
-    }
-  }
+      return updatedLesson;
+    },
+  );
 
-  // Get the full curriculum for a course
-  async getCurriculumHandler(
-    request: FastifyRequest<{
-      Params: { courseId: string };
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const courseId = parseInt(request.params.courseId, 10);
+  // Delete lesson
+  deleteLessonHandler = asyncHandler(
+    async (
+      request: FastifyRequest<{ Params: { courseId: string; moduleId: string; lessonId: string } }>,
+      _reply: FastifyReply,
+    ): Promise<SuccessResponse> => {
+      const { courseId, moduleId, lessonId } = request.params;
 
-      if (isNaN(courseId)) {
-        return reply.code(400).send({ error: 'Invalid course ID' });
+      const result = await this.courseService.deleteLesson(courseId, moduleId, lessonId);
+
+      if (!result) {
+        throw new NotFoundError('Lesson not found');
       }
 
-      const curriculum = await this.courseService.getCurriculum(courseId);
-      reply.send(curriculum);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(400).send({ error: 'Failed to get curriculum', details: errorMessage });
-    }
-  }
-
-  // Add new handler for getting a lesson by path
-  async getLessonByPathHandler(
-    request: FastifyRequest<{
-      Params: { courseId: string; moduleId: string; lessonId: string };
-    }>,
-    reply: FastifyReply,
-  ) {
-    try {
-      const courseId = parseInt(request.params.courseId, 10);
-      const moduleId = parseInt(request.params.moduleId, 10);
-      const lessonId = parseInt(request.params.lessonId, 10);
-
-      // Validate IDs
-      if (isNaN(courseId) || isNaN(moduleId) || isNaN(lessonId)) {
-        return reply.code(400).send({ error: 'Invalid ID parameters' });
-      }
-
-      const lesson = await this.courseService.getLessonByPath(courseId, moduleId, lessonId);
-
-      if (!lesson) {
-        return reply.code(404).send({ error: 'Lesson not found' });
-      }
-
-      reply.send(lesson);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reply.code(500).send({ error: 'Failed to get lesson', details: errorMessage });
-    }
-  }
+      return { success: true };
+    },
+  );
 }
