@@ -245,6 +245,22 @@ export const CourseHelpers = {
     return module.lessons.find((l) => l._id.toString() === lessonId) || null;
   },
 
+  getLessonById: async (lessonId: string) => {
+    const CourseModel = getCourseModel();
+    // Direct query for course with matching lesson ID
+    const course = await CourseModel.findOne({
+      'modules.lessons._id': lessonId,
+    });
+
+    if (!course) return null;
+
+    // Find the module and lesson in the returned document
+    const module = course.modules.find((m) => m.lessons.some((l) => l._id.toString() === lessonId));
+    if (!module) return null;
+
+    return module.lessons.find((l) => l._id.toString() === lessonId) || null;
+  },
+
   // Add a lesson
   addLesson: async (
     courseId: string,
