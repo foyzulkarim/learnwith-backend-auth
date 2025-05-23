@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import { config } from '../src/config';
-import { getCourseModel } from '../src/modules/course/course.model';
+import { config } from '../config';
+import { getCourseModel } from '../modules/course/course.model';
 
 const mockCourses = [
   {
