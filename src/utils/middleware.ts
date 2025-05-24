@@ -5,7 +5,7 @@ import { AppError } from './errors';
 // Authentication middleware - for now, just passes true
 export async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
   // For now, we'll skip actual authentication and just pass true
-  request.user = { authenticated: true, id: 'dummy-user-id' };
+  (request as any).user = { id: 'dummy-user-id', authenticated: true };
   return;
 }
 
@@ -20,7 +20,7 @@ export function validateObjectId(id: string, paramName: string = 'id'): void {
 export function validateCourseId(
   request: FastifyRequest<{ Params: { courseId: string } }>,
   _reply: FastifyReply,
-  done: () => void,
+  done: (error?: Error) => void,
 ) {
   try {
     validateObjectId(request.params.courseId, 'courseId');
@@ -34,7 +34,7 @@ export function validateCourseId(
 export function validateModuleId(
   request: FastifyRequest<{ Params: { moduleId: string } }>,
   _reply: FastifyReply,
-  done: () => void,
+  done: (error?: Error) => void,
 ) {
   try {
     validateObjectId(request.params.moduleId, 'moduleId');
@@ -48,7 +48,7 @@ export function validateModuleId(
 export function validateLessonId(
   request: FastifyRequest<{ Params: { lessonId: string } }>,
   _reply: FastifyReply,
-  done: () => void,
+  done: (error?: Error) => void,
 ) {
   try {
     validateObjectId(request.params.lessonId, 'lessonId');
@@ -74,11 +74,12 @@ export function asyncHandler(
 }
 
 // Type augmentation for Fastify
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: {
-      authenticated: boolean;
-      id: string;
-    };
+import '@fastify/jwt';
+
+declare module '@fastify/jwt' {
+  interface UserJWTPayload {
+    id: string;
+    authenticated?: boolean;
+    [key: string]: any; // Allow additional properties
   }
 }

@@ -69,7 +69,7 @@ You can add these to your .env file or configure them in your deployment environ
       R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY || '',
       R2_BUCKET_NAME: process.env.R2_BUCKET_NAME || '',
       API_BASE_URL: process.env.API_BASE_URL || 'http://localhost:4000',
-      SIGNED_URL_EXPIRATION: process.env.SIGNED_URL_EXPIRATION || '3600',
+      SIGNED_URL_EXPIRATION: parseInt(process.env.SIGNED_URL_EXPIRATION || '3600', 10),
     };
   }
 };
