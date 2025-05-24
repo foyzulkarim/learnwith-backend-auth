@@ -1,3 +1,5 @@
+// This file is unused and its content has been commented out.
+/*
 // src/modules/course/video.model.ts
 import mongoose, { Schema, Model } from 'mongoose';
 
@@ -89,3 +91,4 @@ export const VideoHelpers = {
     return await VideoModel.findByIdAndDelete(videoId);
   },
 };
+*/

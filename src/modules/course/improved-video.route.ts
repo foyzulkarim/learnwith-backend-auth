@@ -1,3 +1,5 @@
+// This file is unused and its content has been commented out.
+/*
 // // src/modules/course/improved-video.route.ts
 // import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 // import { ImprovedVideoStreamingController } from './improved-video.controller';
@@ -79,3 +81,4 @@
 // };
 
 // export default improvedVideoRoutes;
+*/
