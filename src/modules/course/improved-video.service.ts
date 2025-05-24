@@ -1,5 +1,3 @@
-// This file is unused and its content has been commented out.
-/*
 // src/modules/course/improved-video.service.ts
 import { FastifyInstance } from 'fastify';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -275,4 +273,3 @@ export class ImprovedVideoStreamingService {
   //   });
   // }
 }
-*/
