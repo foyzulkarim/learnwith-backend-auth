@@ -11,7 +11,7 @@ import mongoosePlugin from './plugins/mongoose'; // MongoDB connection plugin
 // Import routes
 import authRoutes from './modules/auth/auth.route';
 import courseRoutes from './modules/course/course.route';
-import videoRoutes from './modules/course/video.route';
+// import videoRoutes from './modules/course/video.route';
 import hlsRoutes from './modules/course/hls.route';
 // Import other module routes (e.g., userRoutes) if you have them
 
@@ -48,7 +48,7 @@ export function buildApp(): FastifyInstance {
   // Register course routes
   fastify.register(courseRoutes, { prefix: '/api/courses' });
   // Register video streaming routes
-  fastify.register(videoRoutes);
+  // fastify.register(videoRoutes);
   // Register hls routes
   fastify.register(hlsRoutes, { prefix: '/api/hls' });
   // Register other routes...
