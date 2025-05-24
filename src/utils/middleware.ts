@@ -18,12 +18,13 @@ export function validateObjectId(id: string, paramName: string = 'id'): void {
 
 // Course ID validator middleware
 export function validateCourseId(
-  request: FastifyRequest<{ Params: { courseId: string } }>,
+  request: FastifyRequest<{ Params: Record<string, string> }>,
   _reply: FastifyReply,
   done: (error?: Error) => void,
 ) {
   try {
-    validateObjectId(request.params.courseId, 'courseId');
+    const params = request.params as { courseId: string };
+    validateObjectId(params.courseId, 'courseId');
     done();
   } catch (error) {
     done(error as Error);
@@ -32,12 +33,13 @@ export function validateCourseId(
 
 // Module ID validator middleware
 export function validateModuleId(
-  request: FastifyRequest<{ Params: { moduleId: string } }>,
+  request: FastifyRequest<{ Params: Record<string, string> }>,
   _reply: FastifyReply,
   done: (error?: Error) => void,
 ) {
   try {
-    validateObjectId(request.params.moduleId, 'moduleId');
+    const params = request.params as { courseId: string; moduleId: string };
+    validateObjectId(params.moduleId, 'moduleId');
     done();
   } catch (error) {
     done(error as Error);
@@ -46,12 +48,13 @@ export function validateModuleId(
 
 // Lesson ID validator middleware
 export function validateLessonId(
-  request: FastifyRequest<{ Params: { lessonId: string } }>,
+  request: FastifyRequest<{ Params: Record<string, string> }>,
   _reply: FastifyReply,
   done: (error?: Error) => void,
 ) {
   try {
-    validateObjectId(request.params.lessonId, 'lessonId');
+    const params = request.params as { courseId: string; moduleId: string; lessonId: string };
+    validateObjectId(params.lessonId, 'lessonId');
     done();
   } catch (error) {
     done(error as Error);

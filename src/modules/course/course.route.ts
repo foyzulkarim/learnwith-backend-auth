@@ -80,17 +80,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     courseController.getCurriculumHandler,
   );
 
-  // Module Routes
-  // GET /api/courses/:courseId/modules/:moduleId - Get module
-  fastify.get(
-    '/:courseId/modules/:moduleId',
-    {
-      schema: getModuleSchema,
-      preHandler: [validateCourseId, validateModuleId],
-    },
-    courseController.getModuleHandler,
-  );
-
+  // ACTIVE Module Routes - These are the routes currently being used by the frontend
   // POST /api/courses/:courseId/modules - Create module
   fastify.post(
     '/:courseId/modules',
