@@ -106,4 +106,8 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
       }
     },
   );
+}, {
+  name: 'fastify-jwt'
+  // No other dependencies are explicitly defined for this plugin itself,
+  // though it registers @fastify/jwt which has its own dependencies handled by npm.
 });
