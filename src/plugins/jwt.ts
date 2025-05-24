@@ -9,6 +9,7 @@ import { AuthenticationError } from '../utils/errors'; // Import our custom erro
 export interface UserJWTPayload {
   id: string;
   email: string;
+  role: string; // Adding role for RBAC
   // Add other relevant, non-sensitive user info if needed
 }
 
