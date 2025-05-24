@@ -1,4 +1,6 @@
 // src/modules/course/improved-video.service.ts
+// This service has been streamlined to only include the currently used functionality
+// for generating signed URLs for video segments
 import { FastifyInstance } from 'fastify';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -32,6 +34,7 @@ export class ImprovedVideoStreamingService {
 
   /*
   // The following service methods are currently unused and commented out for cleanup.
+  // Only the getSignedUrl method is currently in use by hls.service.ts
 
   async checkUserAccess(userId: string, videoId: string): Promise<boolean> {
     // ...implementation...

@@ -1,3 +1,5 @@
+// This file is unused and commented out for cleanup. Safe to delete if not needed.
+/*
 // // src/modules/course/video.route.ts
 // import { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 // import { VideoStreamingController } from './video.controller';
@@ -89,3 +91,4 @@
 // };
 
 // export default videoRoutes;
+*/

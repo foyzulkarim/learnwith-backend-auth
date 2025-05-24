@@ -1,3 +1,5 @@
+// This file is unused and commented out for cleanup. Safe to delete if not needed.
+/*
 // // src/modules/course/improved-video.route.ts
 // import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 // import { ImprovedVideoStreamingController } from './improved-video.controller';
@@ -42,13 +44,6 @@
 //   //   done();
 //   // });
 
-//   // ... (all route registrations would go here)
-// };
-// */
-
-//   //   done();
-//   // });
-
 //   // Get master playlist (main .m3u8 file)
 //   fastify.route({
 //     method: 'GET',
@@ -79,3 +74,4 @@
 // };
 
 // export default improvedVideoRoutes;
+// */
