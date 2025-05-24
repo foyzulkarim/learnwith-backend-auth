@@ -1,3 +1,5 @@
+// This file is unused and its content has been commented out.
+/*
 // src/modules/course/direct-video.route.ts
 import { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { ObjectId } from 'mongodb';
@@ -239,3 +241,4 @@ const directVideoRoutes: FastifyPluginAsync = async (fastify: FastifyInstance): 
 };
 
 export default directVideoRoutes;
+*/
