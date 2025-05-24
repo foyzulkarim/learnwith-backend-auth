@@ -1,3 +1,5 @@
+// This file is unused and commented out for cleanup. Safe to delete if not needed.
+// /*
 // // src/modules/course/video.controller.ts
 // import { FastifyRequest, FastifyReply } from 'fastify';
 // import { VideoStreamingService } from './video.service';
@@ -500,4 +502,5 @@
 //       reply.code(500).send({ error: 'Internal server error' });
 //     }
 //   }
-// }
+// */
+//

@@ -1,3 +1,5 @@
+// This file is unused and commented out for cleanup. Safe to delete if not needed.
+/*
 // // src/modules/course/video.service.ts
 // import { FastifyInstance } from 'fastify';
 // import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
