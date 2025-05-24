@@ -125,7 +125,8 @@ export class AuthService {
       // Check if the user still exists in the database
       const user = await this.userService.findUserById(decoded.id);
       if (!user) {
-        throw new NotFoundError('User not found', 'USER_NOT_FOUND');
+        // This specific error is caught and handled below
+        throw new NotFoundError('User not found for refresh token', 'USER_NOT_FOUND_FOR_REFRESH_TOKEN');
       }
 
       // Generate new tokens for the user
@@ -133,13 +134,13 @@ export class AuthService {
     } catch (error) {
       this.fastify.log.error({ err: error }, 'Error refreshing token');
 
-      // If it's already a NotFoundError, rethrow it
+      // If user associated with refresh token not found
       if (error instanceof NotFoundError) {
-        throw error;
+        throw new AuthenticationError('User associated with the token not found.', 'Unauthorized');
       }
 
-      // Otherwise throw an authentication error
-      throw new AuthenticationError('Invalid or expired refresh token', 'INVALID_REFRESH_TOKEN');
+      // For other errors (e.g., JWT verification errors like expired or invalid token)
+      throw new AuthenticationError('Invalid or expired refresh token.', 'Unauthorized');
     }
   }
 

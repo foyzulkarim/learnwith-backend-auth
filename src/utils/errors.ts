@@ -39,8 +39,9 @@ export class ValidationError extends AppError {
  * Authentication errors (401 Unauthorized)
  */
 export class AuthenticationError extends AppError {
-  constructor(message: string, errorCode = 'AUTHENTICATION_ERROR') {
-    super(message, 401, errorCode, true);
+  constructor(message: string, errorCode: string = 'UNAUTHORIZED', statusCode: number = 401) {
+    super(message, statusCode, errorCode, true); // Order: message, statusCode, errorCode
+    this.name = 'AuthenticationError';
     Object.setPrototypeOf(this, AuthenticationError.prototype);
   }
 }
@@ -49,8 +50,9 @@ export class AuthenticationError extends AppError {
  * Authorization errors (403 Forbidden)
  */
 export class AuthorizationError extends AppError {
-  constructor(message: string, errorCode = 'AUTHORIZATION_ERROR') {
-    super(message, 403, errorCode, true);
+  constructor(message: string = 'You do not have permission to access this resource.', errorCode: string = 'FORBIDDEN', statusCode: number = 403) {
+    super(message, statusCode, errorCode, true); // Order: message, statusCode, errorCode
+    this.name = 'AuthorizationError';
     Object.setPrototypeOf(this, AuthorizationError.prototype);
   }
 }

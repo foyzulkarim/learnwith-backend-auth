@@ -7,6 +7,7 @@ import { isAppError, convertToAppError } from './utils/errors'; // Import error 
 import jwtPlugin from './plugins/jwt';
 import oauth2Plugin from './plugins/oauth2';
 import mongoosePlugin from './plugins/mongoose'; // MongoDB connection plugin
+import authorizePlugin from './plugins/authorization'; // Import the authorization plugin
 
 // Import routes
 import authRoutes from './modules/auth/auth.route';
@@ -41,6 +42,7 @@ export function buildApp(): FastifyInstance {
   // Register essential plugins
   fastify.register(jwtPlugin);
   fastify.register(oauth2Plugin);
+  fastify.register(authorizePlugin); // Register the authorization plugin
 
   // --- Register Routes ---
   // Prefix all auth routes with /api/auth

@@ -1,8 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { CourseService } from './course.service';
 import { CourseController } from './course.controller';
+// Removed old authenticate import, keeping validation middleware
 import {
-  authenticate,
   validateCourseId,
   validateModuleId,
   validateLessonId,
@@ -23,19 +23,18 @@ export default async function courseRoutes(fastify: FastifyInstance) {
   const courseService = new CourseService(fastify);
   const courseController = new CourseController(courseService);
 
-  // Apply global authentication middleware
-  fastify.addHook('onRequest', authenticate);
+  // Global hook removed, authenticate decorator applied per-route
 
   // Course Routes
   // GET /api/courses - Get all courses
-  fastify.get('/', courseController.getAllCoursesHandler);
+  fastify.get('/', { preHandler: [fastify.authenticate] }, courseController.getAllCoursesHandler);
 
   // GET /api/courses/:courseId - Get course by ID
   fastify.get(
     '/:courseId',
     {
       schema: getCourseSchema,
-      preHandler: validateCourseId,
+      preHandler: [fastify.authenticate, validateCourseId],
     },
     courseController.getCourseByIdHandler,
   );
@@ -45,6 +44,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     '/',
     {
       schema: createCourseSchema,
+      preHandler: [fastify.authenticate, fastify.authorize(['creator'])],
     },
     courseController.createCourseHandler,
   );
@@ -54,7 +54,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     '/:courseId',
     {
       schema: updateCourseSchema,
-      preHandler: validateCourseId,
+      preHandler: [fastify.authenticate, fastify.authorize(['creator']), validateCourseId],
     },
     courseController.updateCourseHandler,
   );
@@ -63,8 +63,8 @@ export default async function courseRoutes(fastify: FastifyInstance) {
   fastify.delete(
     '/:courseId',
     {
-      schema: getCourseSchema,
-      preHandler: validateCourseId,
+      schema: getCourseSchema, // Should probably be a schema specific to delete if it expects a body or specific params
+      preHandler: [fastify.authenticate, fastify.authorize(['creator']), validateCourseId],
     },
     courseController.deleteCourseHandler,
   );
@@ -75,7 +75,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     '/:courseId/curriculum',
     {
       schema: getCourseSchema,
-      preHandler: validateCourseId,
+      preHandler: [fastify.authenticate, validateCourseId],
     },
     courseController.getCurriculumHandler,
   );
@@ -86,7 +86,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     '/:courseId/modules',
     {
       schema: createModuleSchema,
-      preHandler: validateCourseId,
+      preHandler: [fastify.authenticate, fastify.authorize(['creator']), validateCourseId],
     },
     courseController.createModuleHandler,
   );
@@ -96,7 +96,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     '/:courseId/modules/:moduleId',
     {
       schema: updateModuleSchema,
-      preHandler: [validateCourseId, validateModuleId],
+      preHandler: [fastify.authenticate, fastify.authorize(['creator']), validateCourseId, validateModuleId],
     },
     courseController.updateModuleHandler,
   );
@@ -105,8 +105,8 @@ export default async function courseRoutes(fastify: FastifyInstance) {
   fastify.delete(
     '/:courseId/modules/:moduleId',
     {
-      schema: getModuleSchema,
-      preHandler: [validateCourseId, validateModuleId],
+      schema: getModuleSchema, // Schema might need adjustment for DELETE
+      preHandler: [fastify.authenticate, fastify.authorize(['creator']), validateCourseId, validateModuleId],
     },
     courseController.deleteModuleHandler,
   );
@@ -117,7 +117,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     '/:courseId/modules/:moduleId/lessons/:lessonId',
     {
       schema: getLessonSchema,
-      preHandler: [validateCourseId, validateModuleId, validateLessonId],
+      preHandler: [fastify.authenticate, validateCourseId, validateModuleId, validateLessonId],
     },
     courseController.getLessonHandler,
   );
@@ -127,7 +127,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     '/:courseId/modules/:moduleId/lessons',
     {
       schema: createLessonSchema,
-      preHandler: [validateCourseId, validateModuleId],
+      preHandler: [fastify.authenticate, fastify.authorize(['creator']), validateCourseId, validateModuleId],
     },
     courseController.createLessonHandler,
   );
@@ -137,7 +137,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     '/:courseId/modules/:moduleId/lessons/:lessonId',
     {
       schema: updateLessonSchema,
-      preHandler: [validateCourseId, validateModuleId, validateLessonId],
+      preHandler: [fastify.authenticate, fastify.authorize(['creator']), validateCourseId, validateModuleId, validateLessonId],
     },
     courseController.updateLessonHandler,
   );
@@ -146,8 +146,8 @@ export default async function courseRoutes(fastify: FastifyInstance) {
   fastify.delete(
     '/:courseId/modules/:moduleId/lessons/:lessonId',
     {
-      schema: getLessonSchema,
-      preHandler: [validateCourseId, validateModuleId, validateLessonId],
+      schema: getLessonSchema, // Schema might need adjustment for DELETE
+      preHandler: [fastify.authenticate, fastify.authorize(['creator']), validateCourseId, validateModuleId, validateLessonId],
     },
     courseController.deleteLessonHandler,
   );
