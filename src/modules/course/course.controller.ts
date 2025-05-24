@@ -21,12 +21,9 @@ export class CourseController {
 
   // Get all courses
   getAllCoursesHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Querystring: { page?: number; limit?: number } }>,
-      _reply: FastifyReply,
-    ): Promise<PaginatedCourseResponse> => {
-      const page = request.query.page || 1;
-      const limit = request.query.limit || 10;
+    async (request: FastifyRequest, _reply: FastifyReply): Promise<PaginatedCourseResponse> => {
+      const page = (request.query as { page: number }).page || 1;
+      const limit = (request.query as { limit: number }).limit || 10;
 
       const result = await this.courseService.getAllCourses(page, limit);
 
@@ -41,11 +38,10 @@ export class CourseController {
 
   // Get course by ID
   getCourseByIdHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Params: { courseId: string } }>,
-      _reply: FastifyReply,
-    ): Promise<Course> => {
-      const course = await this.courseService.getCourseById(request.params.courseId);
+    async (request: FastifyRequest, _reply: FastifyReply): Promise<Course> => {
+      const course = await this.courseService.getCourseById(
+        (request.params as { courseId: string }).courseId,
+      );
 
       if (!course) {
         throw new NotFoundError('Course not found');
@@ -57,11 +53,8 @@ export class CourseController {
 
   // Create course
   createCourseHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Body: CreateCoursePayload }>,
-      _reply: FastifyReply,
-    ): Promise<Course> => {
-      const courseData = request.body;
+    async (request: FastifyRequest, reply: FastifyReply): Promise<Course> => {
+      const courseData = request.body as CreateCoursePayload;
 
       // Validate required fields
       if (!courseData.title) throw new ValidationError('Title is required');
@@ -80,12 +73,9 @@ export class CourseController {
 
   // Update course
   updateCourseHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Params: { courseId: string }; Body: UpdateCoursePayload }>,
-      _reply: FastifyReply,
-    ): Promise<Course> => {
-      const { courseId } = request.params;
-      const courseData = request.body;
+    async (request: FastifyRequest, _reply: FastifyReply): Promise<Course> => {
+      const { courseId } = request.params as { courseId: string };
+      const courseData = request.body as UpdateCoursePayload;
 
       const updatedCourse = await this.courseService.updateCourse(courseId, courseData);
 
@@ -99,11 +89,8 @@ export class CourseController {
 
   // Delete course
   deleteCourseHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Params: { courseId: string } }>,
-      _reply: FastifyReply,
-    ): Promise<SuccessResponse> => {
-      const { courseId } = request.params;
+    async (request: FastifyRequest, _reply: FastifyReply): Promise<SuccessResponse> => {
+      const { courseId } = request.params as { courseId: string };
 
       const result = await this.courseService.deleteCourse(courseId);
 
@@ -118,89 +105,67 @@ export class CourseController {
   // Curriculum Handlers
 
   // Get course curriculum
-  getCurriculumHandler = asyncHandler(
-    async (request: FastifyRequest<{ Params: { courseId: string } }>, _reply: FastifyReply) => {
-      const { courseId } = request.params;
+  getCurriculumHandler = asyncHandler(async (request: FastifyRequest, _reply: FastifyReply) => {
+    const { courseId } = request.params as { courseId: string };
 
-      const curriculum = await this.courseService.getCurriculum(courseId);
+    const curriculum = await this.courseService.getCurriculum(courseId);
 
-      if (!curriculum) {
-        throw new NotFoundError('Course not found');
-      }
+    if (!curriculum) {
+      throw new NotFoundError('Course not found');
+    }
 
-      return curriculum;
-    },
-  );
+    return curriculum;
+  });
 
   // Module Handlers
 
   // Get module
-  getModuleHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Params: { courseId: string; moduleId: string } }>,
-      _reply: FastifyReply,
-    ) => {
-      const { courseId, moduleId } = request.params;
+  getModuleHandler = asyncHandler(async (request: FastifyRequest, _reply: FastifyReply) => {
+    const { courseId, moduleId } = request.params as { courseId: string; moduleId: string };
 
-      const module = await this.courseService.getModule(courseId, moduleId);
+    const module = await this.courseService.getModule(courseId, moduleId);
 
-      if (!module) {
-        throw new NotFoundError('Module not found');
-      }
+    if (!module) {
+      throw new NotFoundError('Module not found');
+    }
 
-      return module;
-    },
-  );
+    return module;
+  });
 
   // Create module
-  createModuleHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Params: { courseId: string }; Body: CreateModulePayload }>,
-      _reply: FastifyReply,
-    ) => {
-      const { courseId } = request.params;
-      const moduleData = request.body;
+  createModuleHandler = asyncHandler(async (request: FastifyRequest, reply: FastifyReply) => {
+    // verify the params parse the payload from the request
+    const { courseId } = request.params as { courseId: string };
+    const moduleData = request.body as CreateModulePayload;
 
-      // Validate required fields
-      if (!moduleData.title) throw new ValidationError('Title is required');
-      if (moduleData.order === undefined) throw new ValidationError('Order is required');
+    // Validate required fields
+    if (!moduleData.title) throw new ValidationError('Title is required');
+    if (moduleData.order === undefined) throw new ValidationError('Order is required');
 
-      const newModule = await this.courseService.createModule(courseId, moduleData);
+    const newModule = await this.courseService.createModule(courseId, moduleData);
 
-      reply.code(201);
-      return newModule;
-    },
-  );
+    reply.code(201);
+    return newModule;
+  });
 
   // Update module
-  updateModuleHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{
-        Params: { courseId: string; moduleId: string };
-        Body: UpdateModulePayload;
-      }>,
-      _reply: FastifyReply,
-    ) => {
-      const { courseId, moduleId } = request.params;
-      const moduleData = request.body;
+  updateModuleHandler = asyncHandler(async (request: FastifyRequest, _reply: FastifyReply) => {
+    const { courseId, moduleId } = request.params as { courseId: string; moduleId: string };
+    const moduleData = request.body as UpdateModulePayload;
 
-      const updatedModule = await this.courseService.updateModule(courseId, moduleId, moduleData);
+    const updatedModule = await this.courseService.updateModule(courseId, moduleId, moduleData);
 
-      if (!updatedModule) {
-        throw new NotFoundError('Module not found');
-      }
+    if (!updatedModule) {
+      throw new NotFoundError('Module not found');
+    }
 
-      return updatedModule;
-    },
-  );
+    return updatedModule;
+  });
 
   // Delete module
   deleteModuleHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Params: { courseId: string; moduleId: string } }>,
-      _reply: FastifyReply,
-    ): Promise<SuccessResponse> => {
-      const { courseId, moduleId } = request.params;
+    async (request: FastifyRequest, _reply: FastifyReply): Promise<SuccessResponse> => {
+      const { courseId, moduleId } = request.params as { courseId: string; moduleId: string };
 
       const result = await this.courseService.deleteModule(courseId, moduleId);
 
@@ -215,79 +180,68 @@ export class CourseController {
   // Lesson Handlers
 
   // Get lesson
-  getLessonHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Params: { courseId: string; moduleId: string; lessonId: string } }>,
-    ) => {
-      const { courseId, moduleId, lessonId } = request.params;
+  getLessonHandler = asyncHandler(async (request: FastifyRequest) => {
+    const { courseId, moduleId, lessonId } = request.params as {
+      courseId: string;
+      moduleId: string;
+      lessonId: string;
+    };
 
-      const lesson = await this.courseService.getLesson(courseId, moduleId, lessonId);
+    const lesson = await this.courseService.getLesson(courseId, moduleId, lessonId);
 
-      if (!lesson) {
-        throw new NotFoundError('Lesson not found');
-      }
+    if (!lesson) {
+      throw new NotFoundError('Lesson not found');
+    }
 
-      return lesson;
-    },
-  );
+    return lesson;
+  });
 
   // Create lesson
-  createLessonHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{
-        Params: { courseId: string; moduleId: string };
-        Body: CreateLessonPayload;
-      }>,
-      _reply: FastifyReply,
-    ) => {
-      const { courseId, moduleId } = request.params;
-      const lessonData = request.body;
+  createLessonHandler = asyncHandler(async (request: FastifyRequest, reply: FastifyReply) => {
+    const { courseId, moduleId } = request.params as { courseId: string; moduleId: string };
+    const lessonData = request.body as CreateLessonPayload;
 
-      // Validate required fields
-      if (!lessonData.title) throw new ValidationError('Title is required');
-      if (lessonData.order === undefined) throw new ValidationError('Order is required');
+    // Validate required fields
+    if (!lessonData.title) throw new ValidationError('Title is required');
+    if (lessonData.order === undefined) throw new ValidationError('Order is required');
 
-      const newLesson = await this.courseService.createLesson(courseId, moduleId, lessonData);
+    const newLesson = await this.courseService.createLesson(courseId, moduleId, lessonData);
 
-      reply.code(201);
-      return newLesson;
-    },
-  );
+    reply.code(201);
+    return newLesson;
+  });
 
   // Update lesson
-  updateLessonHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{
-        Params: { courseId: string; moduleId: string; lessonId: string };
-        Body: UpdateLessonPayload;
-      }>,
-      _reply: FastifyReply,
-    ) => {
-      const { courseId, moduleId, lessonId } = request.params;
-      const lessonData = request.body;
+  updateLessonHandler = asyncHandler(async (request: FastifyRequest, _reply: FastifyReply) => {
+    const { courseId, moduleId, lessonId } = request.params as {
+      courseId: string;
+      moduleId: string;
+      lessonId: string;
+    };
+    const lessonData = request.body as UpdateLessonPayload;
 
-      const updatedLesson = await this.courseService.updateLesson(
-        courseId,
-        moduleId,
-        lessonId,
-        lessonData,
-      );
+    const updatedLesson = await this.courseService.updateLesson(
+      courseId,
+      moduleId,
+      lessonId,
+      lessonData,
+    );
 
-      if (!updatedLesson) {
-        throw new NotFoundError('Lesson not found');
-      }
+    if (!updatedLesson) {
+      throw new NotFoundError('Lesson not found');
+    }
 
-      return updatedLesson;
-    },
-  );
+    return updatedLesson;
+  });
 
   // Delete lesson
   deleteLessonHandler = asyncHandler(
-    async (
-      request: FastifyRequest<{ Params: { courseId: string; moduleId: string; lessonId: string } }>,
-      _reply: FastifyReply,
-    ): Promise<SuccessResponse> => {
-      const { courseId, moduleId, lessonId } = request.params;
+    async (request: FastifyRequest, _reply: FastifyReply): Promise<SuccessResponse> => {
+      const { courseId, moduleId, lessonId } = request.params as {
+        courseId: string;
+        moduleId: string;
+        lessonId: string;
+      };
 
       const result = await this.courseService.deleteLesson(courseId, moduleId, lessonId);
 
