@@ -34,7 +34,12 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
       throw new NotFoundError('User not found', 'USER_NOT_FOUND');
     }
     // Return non-sensitive user info
-    return { id: fullUser.id, email: fullUser.email, name: fullUser.name };
+    return {
+      id: fullUser.id,
+      email: fullUser.email,
+      name: fullUser.name,
+      role: fullUser.role,
+    };
   });
 
   // Test route to verify cookie-based authentication
@@ -44,6 +49,7 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
       message: 'Authentication successful!',
       userId: request.jwt.user.id,
       email: request.jwt.user.email,
+      role: request.jwt.user.role,
     };
   });
 

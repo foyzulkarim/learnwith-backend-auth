@@ -96,6 +96,7 @@ export class AuthService {
     const payload: UserJWTPayload = {
       id: user.id,
       email: user.email,
+      role: user.role, // Include the role for role-based access control
       // Add other claims as needed
     };
 
