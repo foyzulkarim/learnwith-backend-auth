@@ -42,12 +42,8 @@ export function buildApp(): FastifyInstance {
   // Register essential plugins
   fastify.register(jwtPlugin);
 
-  // Only register OAuth plugin if enabled
-  if (config.OAUTH_ENABLED !== false) {
-    fastify.register(oauth2Plugin);
-  } else {
-    fastify.log.warn('OAuth is disabled. Skipping oauth2Plugin registration.');
-  }
+  // Register OAuth2 plugin
+  fastify.register(oauth2Plugin);
 
   // Global authentication middleware with exclusions for public routes
   fastify.addHook('onRequest', (request, reply, done) => {

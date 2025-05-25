@@ -10,9 +10,6 @@ export const envSchema = z.object({
   FRONTEND_URL: z.string().url().default('http://localhost:3030'), // URL of your frontend app
   ALLOWED_ORIGINS: z.string().optional().default('http://localhost:3030'), // Comma-separated list of allowed origins for CORS
 
-  // Feature Flags
-  OAUTH_ENABLED: z.coerce.boolean().default(true), // Can be disabled for environments without internet access
-
   // Google OAuth Credentials
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
   GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
@@ -43,7 +40,6 @@ DATABASE_URL="mongodb://localhost:27017/learnwith"
 JWT_SECRET="your_super_secret_jwt_key_at_least_32_chars_long"
 FRONTEND_URL="http://localhost:5173" # Or your deployed frontend URL
 ALLOWED_ORIGINS="http://localhost:5173,https://your-app.com" # For CORS
-OAUTH_ENABLED=true # Set to false to disable OAuth if having network issues
 
 GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
 GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET"

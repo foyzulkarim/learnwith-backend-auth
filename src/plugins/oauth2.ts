@@ -12,12 +12,6 @@ declare module 'fastify' {
 }
 
 export default fp(async function oauth2Plugin(fastify: FastifyInstance) {
-  // Skip OAuth registration if it's disabled in config
-  if (config.OAUTH_ENABLED === false) {
-    fastify.log.warn('Google OAuth integration is disabled via configuration');
-    return;
-  }
-
   try {
     // Instead of using the discovery protocol, use direct token endpoints
     // This avoids network issues when trying to contact accounts.google.com for discovery
