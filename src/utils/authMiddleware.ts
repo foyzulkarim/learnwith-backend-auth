@@ -18,10 +18,21 @@ export const authenticate = async function (
   options?: AuthenticationOptions,
 ): Promise<void> {
   try {
+    // Debug logging
+    request.server.log.info('Authentication middleware called for:', {
+      url: request.url,
+      method: request.method,
+      cookies: request.cookies,
+      authHeader: request.headers.authorization,
+    });
+
     // 1. Extract token using shared utility
     const token = extractToken(request);
 
+    request.server.log.info('Extracted token:', { token: token ? 'present' : 'missing' });
+
     if (!isValidToken(token)) {
+      request.server.log.warn('Token validation failed');
       return reply.status(401).send({
         statusCode: 401,
         error: 'Unauthorized',
@@ -33,6 +44,7 @@ export const authenticate = async function (
     let payload: Record<string, unknown>;
     try {
       payload = await request.server.jwt.verify(token);
+      request.server.log.info('JWT verification successful:', { payload });
     } catch (error) {
       request.server.log.error('JWT verification failed:', error);
       return reply.status(401).send({
@@ -60,6 +72,8 @@ export const authenticate = async function (
       iat: payload.iat as number | undefined,
       exp: payload.exp as number | undefined,
     };
+
+    request.server.log.info('Setting user data:', { userData });
 
     // 5. Optional database verification for critical operations
     if (options?.requireFreshUser) {
@@ -103,8 +117,10 @@ export const authenticate = async function (
     } else {
       request.jwt.user = userData;
     }
+
+    request.server.log.info('Authentication successful, user attached to request');
   } catch (error) {
-    request.server.log.error(error);
+    request.server.log.error('Authentication middleware error:', error);
     return reply.status(500).send({
       statusCode: 500,
       error: 'Internal Server Error',

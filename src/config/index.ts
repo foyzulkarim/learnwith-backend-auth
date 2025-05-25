@@ -50,7 +50,6 @@ export const publicRoutes: string[] = [
   '/api/auth/google',
   '/api/auth/google/callback',
   '/api/auth/refresh',
-  '/', // Root path for health check
   '/health', // Additional health check endpoint
   '/api/docs', // API documentation (if enabled)
 ];

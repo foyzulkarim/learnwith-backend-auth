@@ -7,8 +7,6 @@ import { isAppError, convertToAppError } from './utils/errors'; // Import error 
 import jwtPlugin from './plugins/jwt';
 import oauth2Plugin from './plugins/oauth2';
 import mongoosePlugin from './plugins/mongoose'; // MongoDB connection plugin
-import { authenticate } from './utils/authMiddleware';
-import { publicRoutes } from './config';
 
 // Import routes
 import authRoutes from './modules/auth/auth.route';
@@ -47,11 +45,29 @@ export function buildApp(): FastifyInstance {
   fastify.register(oauth2Plugin);
 
   // Global authentication middleware with exclusions for public routes
+  // NOTE: Commented out to use route-specific authentication instead
+  /*
   fastify.addHook('onRequest', async (request, reply) => {
+    // Handle root path specifically
+    if (request.url === '/') {
+      return; // Skip authentication for root path
+    }
+
+    // Debug logging
+    const matchingRoute = publicRoutes.find((route) => request.url.startsWith(route));
+    const isPublicRoute = publicRoutes.some((route) => request.url.startsWith(route));
+    
+    fastify.log.info(`Global auth hook called for: ${request.url} (${request.method})`);
+    fastify.log.info(`Is public route: ${isPublicRoute}, Matching route: ${matchingRoute}`);
+    fastify.log.info(`Public routes: ${JSON.stringify(publicRoutes)}`);
+
     // Skip authentication for public routes
-    if (publicRoutes.some((route) => request.url.startsWith(route))) {
+    if (isPublicRoute) {
+      fastify.log.info(`Skipping authentication for public route: ${request.url}, matched: ${matchingRoute}`);
       return;
     }
+
+    fastify.log.info(`Applying authentication for protected route: ${request.url}`);
 
     // Apply authentication for all other routes
     try {
@@ -68,6 +84,7 @@ export function buildApp(): FastifyInstance {
       throw err; // Re-throw to let Fastify handle the error
     }
   });
+  */
 
   // --- Register Routes ---
   // Prefix all auth routes with /api/auth
