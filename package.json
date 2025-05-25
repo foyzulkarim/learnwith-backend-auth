@@ -11,7 +11,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "build:prod": "npm ci --only=production && tsc",
+    "build:prod": "npm ci && tsc",
     "start": "node dist/server.js",
     "start:prod": "NODE_ENV=production node dist/server.js",
     "dev": "tsx watch src/server.ts",
