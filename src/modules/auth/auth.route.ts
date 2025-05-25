@@ -3,8 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
-import { NotFoundError, AuthenticationError } from '../../utils/errors';
-import { getCookieConfig } from '../../config';
+import { NotFoundError } from '../../utils/errors';
 
 export default async function authRoutes(fastify: FastifyInstance): Promise<void> {
   // Create services
@@ -54,27 +53,6 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
       email: request.jwt.user.email,
       role: request.jwt.user.role,
     };
-  });
-
-  // Route to refresh the token
-  fastify.post('/refresh', async (request, reply) => {
-    // Extract the refresh token from the cookie
-    const refreshToken = request.cookies.refresh_token;
-
-    if (!refreshToken) {
-      throw new AuthenticationError('Refresh token not found', 'MISSING_REFRESH_TOKEN');
-    }
-
-    // Verify and refresh the token
-    const newTokens = await authService.refreshToken(refreshToken);
-
-    // Set the new tokens in cookies using consistent configuration
-    reply.setCookie('auth_token', newTokens.accessToken, getCookieConfig());
-
-    // Also set the new refresh token cookie
-    reply.setCookie('refresh_token', newTokens.refreshToken, getCookieConfig());
-
-    return { message: 'Token refreshed successfully' };
   });
 
   // Logout route to clear the auth_token cookie
