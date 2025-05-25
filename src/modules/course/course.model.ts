@@ -102,8 +102,17 @@ CourseSchema.index({ category: 1 });
 CourseSchema.index({ instructor: 1 });
 CourseSchema.index({ difficulty: 1 });
 CourseSchema.index({ featured: 1 });
+CourseSchema.index({ bestseller: 1 });
+CourseSchema.index({ newCourse: 1 });
+// Compound indexes for common query patterns
+CourseSchema.index({ category: 1, difficulty: 1 });
+CourseSchema.index({ featured: 1, createdAt: -1 });
+CourseSchema.index({ bestseller: 1, category: 1 });
+CourseSchema.index({ instructor: 1, createdAt: -1 });
 // Index for efficient lesson lookup
 CourseSchema.index({ 'modules._id': 1, 'modules.lessons._id': 1 });
+// Text search index for course titles and descriptions
+CourseSchema.index({ title: 'text', description: 'text' });
 
 // Pre-save hook to calculate totalLessons
 CourseSchema.pre('save', function (next) {

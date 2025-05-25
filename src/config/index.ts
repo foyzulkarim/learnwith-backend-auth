@@ -19,6 +19,7 @@ const result = dotenv.config({ path: envPath });
 
 if (result.error && nodeEnv !== 'production') {
   // Allow missing .env in production if variables are set via the environment
+  // eslint-disable-next-line no-console
   console.warn(`Warning: Could not load .env file from ${envPath}:`, result.error.message);
 }
 
@@ -27,8 +28,10 @@ let config: AppConfig;
 
 try {
   config = envSchema.parse(process.env);
+  // eslint-disable-next-line no-console
   console.log('Configuration loaded successfully.');
 } catch (error) {
+  // eslint-disable-next-line no-console
   console.error('❌ Invalid environment variables:', error);
   // Exit the process if validation fails, as the app cannot run correctly
   process.exit(1);
