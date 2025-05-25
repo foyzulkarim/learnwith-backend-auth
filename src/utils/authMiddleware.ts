@@ -1,6 +1,4 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { getUserModel } from '../modules/user/user.model';
-import { ObjectId } from 'mongodb';
 import { Role } from '../modules/user/types';
 
 // Extend the Fastify type definitions for authenticated requests
@@ -14,6 +12,17 @@ declare module 'fastify' {
       iat?: number; // JWT issued at timestamp
       exp?: number; // JWT expiration timestamp
     };
+
+    // JWT information for consistency with fastify-jwt plugin
+    jwt?: {
+      user: {
+        id: string;
+        email: string;
+        role: Role;
+        iat?: number;
+        exp?: number;
+      };
+    };
   }
 }
 
@@ -24,7 +33,7 @@ export const authenticate = async function (
   try {
     // 1. Extract token from Authorization header or cookie
     let token: string | undefined;
-    const authHeader = request.headers['authorization'];
+    const authHeader = request.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
     } else if (request.cookies && request.cookies.auth_token) {
@@ -52,27 +61,37 @@ export const authenticate = async function (
       });
     }
 
-    // 3. Fetch user from DB
-    const UserModel = getUserModel();
-    const user = await UserModel.findById(new ObjectId(payload.id)).select('_id email role');
-
-    if (!user) {
+    // 3. Use the user data directly from the token payload
+    // This eliminates the database query since we already trust the token
+    // The payload includes id, email, and role from the generateTokens function
+    if (!payload.id || !payload.email || !payload.role) {
+      request.server.log.error('JWT payload missing required user fields:', payload);
       return reply.status(401).send({
         statusCode: 401,
         error: 'Unauthorized',
-        message: 'User associated with the token not found.',
+        message: 'Authentication token has an invalid format.',
       });
     }
 
-    // 4. Attach user to request with additional JWT claims
-    request.user = {
-      id: user._id.toString(),
-      email: user.email,
-      role: user.role,
+    // 4. Attach user to request with JWT claims
+    const userData = {
+      id: payload.id as string,
+      email: payload.email as string,
+      role: payload.role as Role,
       // Include JWT timestamps if available in payload
       iat: payload.iat,
       exp: payload.exp,
     };
+
+    // Set both user properties for consistency with the jwt plugin decorator
+    request.user = userData;
+
+    // Also set jwt.user property for consistency with fastify.authenticate
+    if (!request.jwt) {
+      request.jwt = { user: userData };
+    } else {
+      request.jwt.user = userData;
+    }
   } catch (error) {
     request.server.log.error(error);
     return reply.status(500).send({
