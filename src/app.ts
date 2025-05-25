@@ -32,7 +32,11 @@ export function buildApp(): FastifyInstance {
 
   // Register CORS plugin to handle preflight requests
   fastify.register(import('@fastify/cors'), {
-    origin: isDev ? 'http://localhost:3030' : config.ALLOWED_ORIGINS?.split(',') || true,
+    origin: isDev
+      ? 'http://localhost:3030'
+      : config.ALLOWED_ORIGINS
+        ? config.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
+        : [config.FRONTEND_URL], // Fallback to FRONTEND_URL if ALLOWED_ORIGINS is not set
     credentials: true, // Important for cookies with cross-origin requests
     methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
