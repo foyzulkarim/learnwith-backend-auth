@@ -10,3 +10,13 @@ dist # If you don't want to copy a local dist folder before the build step in Do
 # Add any other files/folders that are not needed in the image
 # (e.g., local development config, IDE specific files)
 .env
+.env.local
+.env.development
+.env.test
+.env.production
+.nyc_output
+coverage
+.husky
+.vscode
+.do
+*.log

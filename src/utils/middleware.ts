@@ -2,12 +2,8 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { ObjectId } from 'mongodb';
 import { AppError } from './errors';
 
-// Authentication middleware - for now, just passes true
-export async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
-  // For now, we'll skip actual authentication and just pass true
-  (request as any).user = { id: 'dummy-user-id', authenticated: true };
-  return;
-}
+// Re-export from authMiddleware.ts
+export { authenticate, authorizeRoles } from './authMiddleware';
 
 // Validate MongoDB ObjectID
 export function validateObjectId(id: string, paramName: string = 'id'): void {
@@ -18,10 +14,10 @@ export function validateObjectId(id: string, paramName: string = 'id'): void {
 
 // Course ID validator middleware
 export function validateCourseId(
-  request: FastifyRequest<{ Params: Record<string, string> }>,
+  request: FastifyRequest,
   _reply: FastifyReply,
   done: (error?: Error) => void,
-) {
+): void {
   try {
     const params = request.params as { courseId: string };
     validateObjectId(params.courseId, 'courseId');
@@ -33,10 +29,10 @@ export function validateCourseId(
 
 // Module ID validator middleware
 export function validateModuleId(
-  request: FastifyRequest<{ Params: Record<string, string> }>,
+  request: FastifyRequest,
   _reply: FastifyReply,
   done: (error?: Error) => void,
-) {
+): void {
   try {
     const params = request.params as { courseId: string; moduleId: string };
     validateObjectId(params.moduleId, 'moduleId');
@@ -48,10 +44,10 @@ export function validateModuleId(
 
 // Lesson ID validator middleware
 export function validateLessonId(
-  request: FastifyRequest<{ Params: Record<string, string> }>,
+  request: FastifyRequest,
   _reply: FastifyReply,
   done: (error?: Error) => void,
-) {
+): void {
   try {
     const params = request.params as { courseId: string; moduleId: string; lessonId: string };
     validateObjectId(params.lessonId, 'lessonId');
@@ -63,9 +59,9 @@ export function validateLessonId(
 
 // Helper to handle async route handlers and properly catch/forward errors
 export function asyncHandler(
-  handler: (request: FastifyRequest, _reply: FastifyReply) => Promise<any>,
-) {
-  return async (request: FastifyRequest, reply: FastifyReply) => {
+  handler: (request: FastifyRequest, _reply: FastifyReply) => Promise<unknown>,
+): (request: FastifyRequest, reply: FastifyReply) => Promise<unknown> {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<unknown> => {
     try {
       return await handler(request, reply);
     } catch (error) {
@@ -76,13 +72,4 @@ export function asyncHandler(
   };
 }
 
-// Type augmentation for Fastify
-import '@fastify/jwt';
-
-declare module '@fastify/jwt' {
-  interface UserJWTPayload {
-    id: string;
-    authenticated?: boolean;
-    [key: string]: any; // Allow additional properties
-  }
-}
+// Note: JWT types are defined in src/plugins/jwt.ts to avoid conflicts

@@ -19,6 +19,7 @@ const result = dotenv.config({ path: envPath });
 
 if (result.error && nodeEnv !== 'production') {
   // Allow missing .env in production if variables are set via the environment
+  // eslint-disable-next-line no-console
   console.warn(`Warning: Could not load .env file from ${envPath}:`, result.error.message);
 }
 
@@ -27,8 +28,10 @@ let config: AppConfig;
 
 try {
   config = envSchema.parse(process.env);
+  // eslint-disable-next-line no-console
   console.log('Configuration loaded successfully.');
 } catch (error) {
+  // eslint-disable-next-line no-console
   console.error('❌ Invalid environment variables:', error);
   // Exit the process if validation fails, as the app cannot run correctly
   process.exit(1);
@@ -38,6 +41,18 @@ try {
 export const isProd = config.NODE_ENV === 'production';
 export const isDev = config.NODE_ENV === 'development';
 export const isTest = config.NODE_ENV === 'test';
+
+// Public routes that don't require authentication
+// These can be overridden per environment if needed
+export const publicRoutes: string[] = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/google',
+  '/api/auth/google/callback',
+  '/api/auth/refresh',
+  '/health', // Additional health check endpoint
+  '/api/docs', // API documentation (if enabled)
+];
 
 // Standard cookie configuration to ensure consistency
 export interface CookieOptions {

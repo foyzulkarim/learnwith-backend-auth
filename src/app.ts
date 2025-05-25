@@ -40,7 +40,51 @@ export function buildApp(): FastifyInstance {
 
   // Register essential plugins
   fastify.register(jwtPlugin);
+
+  // Register OAuth2 plugin
   fastify.register(oauth2Plugin);
+
+  // Global authentication middleware with exclusions for public routes
+  // NOTE: Commented out to use route-specific authentication instead
+  /*
+  fastify.addHook('onRequest', async (request, reply) => {
+    // Handle root path specifically
+    if (request.url === '/') {
+      return; // Skip authentication for root path
+    }
+
+    // Debug logging
+    const matchingRoute = publicRoutes.find((route) => request.url.startsWith(route));
+    const isPublicRoute = publicRoutes.some((route) => request.url.startsWith(route));
+    
+    fastify.log.info(`Global auth hook called for: ${request.url} (${request.method})`);
+    fastify.log.info(`Is public route: ${isPublicRoute}, Matching route: ${matchingRoute}`);
+    fastify.log.info(`Public routes: ${JSON.stringify(publicRoutes)}`);
+
+    // Skip authentication for public routes
+    if (isPublicRoute) {
+      fastify.log.info(`Skipping authentication for public route: ${request.url}, matched: ${matchingRoute}`);
+      return;
+    }
+
+    fastify.log.info(`Applying authentication for protected route: ${request.url}`);
+
+    // Apply authentication for all other routes
+    try {
+      await authenticate(request, reply);
+    } catch (err) {
+      fastify.log.warn(
+        {
+          err,
+          url: request.url,
+          method: request.method,
+        },
+        'Authentication failed',
+      );
+      throw err; // Re-throw to let Fastify handle the error
+    }
+  });
+  */
 
   // --- Register Routes ---
   // Prefix all auth routes with /api/auth

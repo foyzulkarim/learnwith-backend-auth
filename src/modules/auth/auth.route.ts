@@ -3,8 +3,8 @@ import { FastifyInstance } from 'fastify';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
-import { NotFoundError, AuthenticationError } from '../../utils/errors';
-import { getCookieConfig } from '../../config';
+import { NotFoundError } from '../../utils/errors';
+import { authenticate } from '../../utils/authMiddleware';
 
 export default async function authRoutes(fastify: FastifyInstance): Promise<void> {
   // Create services
@@ -13,6 +13,11 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
 
   // Instantiate controller with the service
   const authController = new AuthController(authService);
+
+  // Create a preHandler wrapper for authentication
+  const authPreHandler = async (request: any, reply: any) => {
+    await authenticate(request, reply);
+  };
 
   // --- Google OAuth Routes ---
 
@@ -23,56 +28,53 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
   // Callback route where Google redirects the user back
   fastify.get('/google/callback', authController.googleCallbackHandler.bind(authController));
 
+  // Refresh token route
+  fastify.post('/refresh', authController.refreshTokenHandler.bind(authController));
+
   // --- Example Protected Routes ---
   // Example route demonstrating JWT authentication check with user data
-  fastify.get('/me', { preHandler: [fastify.authenticate] }, async (request, _reply) => {
-    // Access authenticated user data via request.jwt.user
-    const userData = request.jwt.user;
-    // Fetch full user profile if needed (avoid including sensitive data in JWT)
-    const fullUser = await userService.findUserById(userData.id);
-    if (!fullUser) {
-      throw new NotFoundError('User not found', 'USER_NOT_FOUND');
-    }
-    // Return non-sensitive user info
-    return {
-      id: fullUser.id,
-      email: fullUser.email,
-      name: fullUser.name,
-      role: fullUser.role,
-    };
-  });
+  fastify.get(
+    '/me',
+    {
+      preHandler: authPreHandler,
+    },
+    async (request, _reply) => {
+      // Access authenticated user data via request.user (set by auth middleware)
+      console.log('userData', {
+        request,
+      });
+      const userData = request.user;
+      // Fetch full user profile if needed (avoid including sensitive data in JWT)
+      const fullUser = await userService.findUserById(userData.id);
+      if (!fullUser) {
+        throw new NotFoundError('User not found', 'USER_NOT_FOUND');
+      }
+      // Return non-sensitive user info
+      return {
+        id: fullUser.id,
+        email: fullUser.email,
+        name: fullUser.name,
+        role: fullUser.role,
+      };
+    },
+  );
 
   // Test route to verify cookie-based authentication
-  fastify.get('/protected', { preHandler: [fastify.authenticate] }, async (request) => {
-    // If we get here, authentication via either cookie or Authorization header was successful
-    return {
-      message: 'Authentication successful!',
-      userId: request.jwt.user.id,
-      email: request.jwt.user.email,
-      role: request.jwt.user.role,
-    };
-  });
-
-  // Route to refresh the token
-  fastify.post('/refresh', async (request, reply) => {
-    // Extract the refresh token from the cookie
-    const refreshToken = request.cookies.refresh_token;
-
-    if (!refreshToken) {
-      throw new AuthenticationError('Refresh token not found', 'MISSING_REFRESH_TOKEN');
-    }
-
-    // Verify and refresh the token
-    const newTokens = await authService.refreshToken(refreshToken);
-
-    // Set the new tokens in cookies using consistent configuration
-    reply.setCookie('auth_token', newTokens.accessToken, getCookieConfig());
-
-    // Also set the new refresh token cookie
-    reply.setCookie('refresh_token', newTokens.refreshToken, getCookieConfig());
-
-    return { message: 'Token refreshed successfully' };
-  });
+  fastify.get(
+    '/protected',
+    {
+      preHandler: authPreHandler,
+    },
+    async (request) => {
+      // If we get here, authentication via either cookie or Authorization header was successful
+      return {
+        message: 'Authentication successful!',
+        userId: request.user.id,
+        email: request.user.email,
+        role: request.user.role,
+      };
+    },
+  );
 
   // Logout route to clear the auth_token cookie
   fastify.post('/logout', authController.logoutHandler.bind(authController));

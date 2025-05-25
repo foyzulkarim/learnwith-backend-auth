@@ -4,18 +4,24 @@ import fastifyJwt from '@fastify/jwt';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config'; // Assuming config is loaded and validated
 import { AuthenticationError } from '../utils/errors'; // Import our custom error type
+import { extractToken, isValidToken } from '../utils/tokenUtils';
 
-// Define the structure of the JWT payload
+import { Role } from '../modules/user/types';
+
+// Define the structure of the JWT payload that extends the base JWT interface
 export interface UserJWTPayload {
   id: string;
   email: string;
-  role: string; // Adding role for RBAC
-  // Add other relevant, non-sensitive user info if needed
+  role: Role; // Adding role for RBAC
+  iat?: number;
+  exp?: number;
+  [key: string]: unknown; // Index signature for @fastify/jwt compatibility
 }
 
 // Extend FastifyRequest interface to include the user payload
 declare module 'fastify' {
   interface FastifyRequest {
+    user: UserJWTPayload;
     jwt: {
       user: UserJWTPayload;
     };
@@ -43,6 +49,7 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
       cookieName: 'auth_token', // The name of the cookie set in auth.controller.ts
       signed: false, // We're not signing the cookie as we're using httpOnly instead
     },
+    decode: { complete: true }, // Include header and signature in decoded value
     // Add verify options if needed
   });
 
@@ -51,16 +58,25 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
     'authenticate',
     async function (request: FastifyRequest, _reply: FastifyReply): Promise<void> {
       try {
-        // First check for token in cookie, then fall back to Authorization header
-        await request.jwtVerify();
+        // Extract token using shared utility
+        const token = extractToken(request);
+
+        if (!isValidToken(token)) {
+          throw new AuthenticationError('Authentication token is missing', 'MISSING_TOKEN');
+        }
+
+        // Verify token
+        const decoded = await fastify.jwt.verify<UserJWTPayload>(token);
+
         // Attach user payload to request for easier access in handlers
-        // Note: The type assertion might be needed depending on exact @fastify/jwt setup
-        request.jwt = { user: request.user as UserJWTPayload };
+        request.jwt = { user: decoded };
+
+        // Also set user property for convenience and backward compatibility
+        request.user = decoded;
       } catch (err) {
         fastify.log.warn({ err, requestId: request.id }, 'Authentication failed');
-        // Instead of handling the error here, throw our custom AuthenticationError
-        // that will be caught by the global error handler
-        throw new AuthenticationError('Invalid or missing authentication token', 'INVALID_TOKEN');
+        // Throw our custom AuthenticationError that will be caught by the global error handler
+        throw new AuthenticationError('Invalid or expired authentication token', 'INVALID_TOKEN');
       }
     },
   );
