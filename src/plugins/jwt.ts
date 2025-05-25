@@ -4,18 +4,24 @@ import fastifyJwt from '@fastify/jwt';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config'; // Assuming config is loaded and validated
 import { AuthenticationError } from '../utils/errors'; // Import our custom error type
+import { extractToken, isValidToken } from '../utils/tokenUtils';
 
-// Define the structure of the JWT payload
+import { Role } from '../modules/user/types';
+
+// Define the structure of the JWT payload that extends the base JWT interface
 export interface UserJWTPayload {
   id: string;
   email: string;
-  role: string; // Adding role for RBAC
-  // Add other relevant, non-sensitive user info if needed
+  role: Role; // Adding role for RBAC
+  iat?: number;
+  exp?: number;
+  [key: string]: unknown; // Index signature for @fastify/jwt compatibility
 }
 
 // Extend FastifyRequest interface to include the user payload
 declare module 'fastify' {
   interface FastifyRequest {
+    user: UserJWTPayload;
     jwt: {
       user: UserJWTPayload;
     };
@@ -52,16 +58,10 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
     'authenticate',
     async function (request: FastifyRequest, _reply: FastifyReply): Promise<void> {
       try {
-        // Extract token from Authorization header or cookie
-        let token: string | undefined;
-        const authHeader = request.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-          token = authHeader.split(' ')[1];
-        } else if (request.cookies && request.cookies.auth_token) {
-          token = request.cookies.auth_token;
-        }
+        // Extract token using shared utility
+        const token = extractToken(request);
 
-        if (!token) {
+        if (!isValidToken(token)) {
           throw new AuthenticationError('Authentication token is missing', 'MISSING_TOKEN');
         }
 

@@ -13,6 +13,14 @@ declare module 'fastify' {
 
 export default fp(async function oauth2Plugin(fastify: FastifyInstance) {
   try {
+    // Validate required configuration before attempting registration
+    if (!config.GOOGLE_CLIENT_ID || !config.GOOGLE_CLIENT_SECRET) {
+      fastify.log.warn(
+        'Google OAuth2 credentials not configured. OAuth login will not be available.',
+      );
+      return; // Exit gracefully without registration
+    }
+
     // Instead of using the discovery protocol, use direct token endpoints
     // This avoids network issues when trying to contact accounts.google.com for discovery
     fastify.register(fastifyOAuth2, {
@@ -40,10 +48,34 @@ export default fp(async function oauth2Plugin(fastify: FastifyInstance) {
 
     fastify.log.info('Google OAuth2 integration registered successfully');
   } catch (error) {
-    // Log the error and continue without crashing the application
+    // Categorize errors and handle appropriately
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorCode =
+      error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined;
+
+    // Only continue silently for network-related issues
+    if (errorCode === 'ENOTFOUND' || errorCode === 'ECONNREFUSED' || errorCode === 'ETIMEDOUT') {
+      fastify.log.warn(
+        { err: error },
+        'OAuth2 registration failed due to network issues. OAuth login will be disabled.',
+      );
+      return; // Continue without OAuth2
+    }
+
+    // For configuration or other critical errors, log but don't crash
+    if (errorMessage.includes('client_id') || errorMessage.includes('client_secret')) {
+      fastify.log.error(
+        { err: error },
+        'OAuth2 registration failed due to configuration error. Check Google OAuth2 credentials.',
+      );
+      return;
+    }
+
+    // For all other errors, log and re-throw to prevent silent failures
     fastify.log.error(
       { err: error },
-      'Failed to register Google OAuth2 integration. OAuth login will not be available.',
+      'OAuth2 registration failed with unexpected error. This may indicate a critical issue.',
     );
+    throw error; // Re-throw unexpected errors
   }
 });

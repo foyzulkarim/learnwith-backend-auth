@@ -39,6 +39,19 @@ export const isProd = config.NODE_ENV === 'production';
 export const isDev = config.NODE_ENV === 'development';
 export const isTest = config.NODE_ENV === 'test';
 
+// Public routes that don't require authentication
+// These can be overridden per environment if needed
+export const publicRoutes: string[] = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/google',
+  '/api/auth/google/callback',
+  '/api/auth/refresh',
+  '/', // Root path for health check
+  '/health', // Additional health check endpoint
+  '/api/docs', // API documentation (if enabled)
+];
+
 // Standard cookie configuration to ensure consistency
 export interface CookieOptions {
   path?: string;

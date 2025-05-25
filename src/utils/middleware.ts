@@ -14,7 +14,7 @@ export function validateObjectId(id: string, paramName: string = 'id'): void {
 
 // Course ID validator middleware
 export function validateCourseId(
-  request: FastifyRequest<{ Params: Record<string, string> }>,
+  request: FastifyRequest,
   _reply: FastifyReply,
   done: (error?: Error) => void,
 ): void {
@@ -29,7 +29,7 @@ export function validateCourseId(
 
 // Module ID validator middleware
 export function validateModuleId(
-  request: FastifyRequest<{ Params: Record<string, string> }>,
+  request: FastifyRequest,
   _reply: FastifyReply,
   done: (error?: Error) => void,
 ): void {
@@ -44,7 +44,7 @@ export function validateModuleId(
 
 // Lesson ID validator middleware
 export function validateLessonId(
-  request: FastifyRequest<{ Params: Record<string, string> }>,
+  request: FastifyRequest,
   _reply: FastifyReply,
   done: (error?: Error) => void,
 ): void {
@@ -72,13 +72,4 @@ export function asyncHandler(
   };
 }
 
-// Type augmentation for Fastify
-import '@fastify/jwt';
-
-declare module '@fastify/jwt' {
-  interface UserJWTPayload {
-    id: string;
-    authenticated?: boolean;
-    [key: string]: unknown; // Allow additional properties
-  }
-}
+// Note: JWT types are defined in src/plugins/jwt.ts to avoid conflicts

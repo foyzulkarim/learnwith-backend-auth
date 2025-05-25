@@ -27,9 +27,9 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
 
   // --- Example Protected Routes ---
   // Example route demonstrating JWT authentication check with user data
-  fastify.get('/me', { preHandler: [fastify.authenticate] }, async (request, _reply) => {
-    // Access authenticated user data via request.jwt.user
-    const userData = request.jwt.user;
+  fastify.get('/me', async (request, _reply) => {
+    // Access authenticated user data via request.user (set by global auth middleware)
+    const userData = request.user;
     // Fetch full user profile if needed (avoid including sensitive data in JWT)
     const fullUser = await userService.findUserById(userData.id);
     if (!fullUser) {
@@ -45,13 +45,13 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
   });
 
   // Test route to verify cookie-based authentication
-  fastify.get('/protected', { preHandler: [fastify.authenticate] }, async (request) => {
+  fastify.get('/protected', async (request) => {
     // If we get here, authentication via either cookie or Authorization header was successful
     return {
       message: 'Authentication successful!',
-      userId: request.jwt.user.id,
-      email: request.jwt.user.email,
-      role: request.jwt.user.role,
+      userId: request.user.id,
+      email: request.user.email,
+      role: request.user.role,
     };
   });
 

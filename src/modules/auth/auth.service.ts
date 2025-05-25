@@ -129,7 +129,7 @@ export class AuthService {
       }
 
       // Find the user in database using the id from the token payload
-      const user = await this.userService.findUserById(decoded.id);
+      const user = await this.userService.findUserById((decoded as UserJWTPayload).id);
       if (!user) {
         throw new AuthenticationError('User not found', 'USER_NOT_FOUND');
       }

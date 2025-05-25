@@ -7,7 +7,8 @@ import { isAppError, convertToAppError } from './utils/errors'; // Import error 
 import jwtPlugin from './plugins/jwt';
 import oauth2Plugin from './plugins/oauth2';
 import mongoosePlugin from './plugins/mongoose'; // MongoDB connection plugin
-import { authenticate, publicRoutes } from './utils/authMiddleware';
+import { authenticate } from './utils/authMiddleware';
+import { publicRoutes } from './config';
 
 // Import routes
 import authRoutes from './modules/auth/auth.route';
@@ -46,27 +47,26 @@ export function buildApp(): FastifyInstance {
   fastify.register(oauth2Plugin);
 
   // Global authentication middleware with exclusions for public routes
-  fastify.addHook('onRequest', (request, reply, done) => {
+  fastify.addHook('onRequest', async (request, reply) => {
     // Skip authentication for public routes
     if (publicRoutes.some((route) => request.url.startsWith(route))) {
-      done();
       return;
     }
 
     // Apply authentication for all other routes
-    authenticate(request, reply)
-      .then(() => done())
-      .catch((err) => {
-        fastify.log.warn(
-          {
-            err,
-            url: request.url,
-            method: request.method,
-          },
-          'Authentication failed',
-        );
-        done(err);
-      });
+    try {
+      await authenticate(request, reply);
+    } catch (err) {
+      fastify.log.warn(
+        {
+          err,
+          url: request.url,
+          method: request.method,
+        },
+        'Authentication failed',
+      );
+      throw err; // Re-throw to let Fastify handle the error
+    }
   });
 
   // --- Register Routes ---

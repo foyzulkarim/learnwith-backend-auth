@@ -14,7 +14,16 @@ export class AuthController {
     try {
       // 1. Use the @fastify/oauth2 plugin to exchange the code for a token
       // The plugin handles the POST request to Google's token endpoint
-      const tokenData = await fastify.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
+      const tokenData =
+        await fastify.googleOAuth2?.getAccessTokenFromAuthorizationCodeFlow(request);
+
+      if (!tokenData) {
+        return reply.status(503).send({
+          statusCode: 503,
+          error: 'Service Unavailable',
+          message: 'OAuth2 service is not available.',
+        });
+      }
 
       fastify.log.info('Received Google access token.');
 

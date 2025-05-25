@@ -1,46 +1,27 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Role } from '../modules/user/types';
+import { extractToken, isValidToken } from './tokenUtils';
+import { UserService } from '../modules/user/user.service';
+import { UserJWTPayload } from '../plugins/jwt';
 
-// Extend the Fastify type definitions for authenticated requests
-declare module 'fastify' {
-  interface FastifyRequest {
-    // User information attached by the authentication middleware
-    user: {
-      id: string; // User ID from MongoDB
-      email: string; // User email
-      role: Role; // User role for authorization checks
-      iat?: number; // JWT issued at timestamp
-      exp?: number; // JWT expiration timestamp
-    };
-
-    // JWT information for consistency with fastify-jwt plugin
-    jwt?: {
-      user: {
-        id: string;
-        email: string;
-        role: Role;
-        iat?: number;
-        exp?: number;
-      };
-    };
-  }
+// Authentication options interface
+export interface AuthenticationOptions {
+  requireFreshUser?: boolean; // Whether to verify user exists in database
 }
+
+// Note: FastifyRequest interface is extended in src/plugins/jwt.ts
+// to avoid duplicate declarations and ensure consistency
 
 export const authenticate = async function (
   request: FastifyRequest,
   reply: FastifyReply,
+  options?: AuthenticationOptions,
 ): Promise<void> {
   try {
-    // 1. Extract token from Authorization header or cookie
-    let token: string | undefined;
-    const authHeader = request.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.split(' ')[1];
-    } else if (request.cookies && request.cookies.auth_token) {
-      token = request.cookies.auth_token;
-    }
+    // 1. Extract token using shared utility
+    const token = extractToken(request);
 
-    if (!token) {
+    if (!isValidToken(token)) {
       return reply.status(401).send({
         statusCode: 401,
         error: 'Unauthorized',
@@ -61,9 +42,7 @@ export const authenticate = async function (
       });
     }
 
-    // 3. Use the user data directly from the token payload
-    // This eliminates the database query since we already trust the token
-    // The payload includes id, email, and role from the generateTokens function
+    // 3. Validate token payload
     if (!payload.id || !payload.email || !payload.role) {
       request.server.log.error('JWT payload missing required user fields:', payload);
       return reply.status(401).send({
@@ -73,17 +52,49 @@ export const authenticate = async function (
       });
     }
 
-    // 4. Attach user to request with JWT claims
-    const userData = {
+    // 4. Create user data from token payload
+    const userData: UserJWTPayload = {
       id: payload.id as string,
       email: payload.email as string,
       role: payload.role as Role,
-      // Include JWT timestamps if available in payload
-      iat: payload.iat,
-      exp: payload.exp,
+      iat: payload.iat as number | undefined,
+      exp: payload.exp as number | undefined,
     };
 
-    // Set both user properties for consistency with the jwt plugin decorator
+    // 5. Optional database verification for critical operations
+    if (options?.requireFreshUser) {
+      try {
+        const userService = new UserService(request.server);
+        const dbUser = await userService.findUserById(userData.id);
+
+        if (!dbUser) {
+          request.server.log.warn(
+            `User ${userData.id} not found in database during fresh user check`,
+          );
+          return reply.status(401).send({
+            statusCode: 401,
+            error: 'Unauthorized',
+            message: 'User account no longer exists.',
+          });
+        }
+
+        // Update user data with fresh information from database
+        userData.email = dbUser.email;
+        userData.role = dbUser.role as Role;
+      } catch (error) {
+        request.server.log.error(
+          { err: error, userId: userData.id },
+          'Database verification failed',
+        );
+        return reply.status(500).send({
+          statusCode: 500,
+          error: 'Internal Server Error',
+          message: 'Authentication verification failed.',
+        });
+      }
+    }
+
+    // 6. Attach user to request with JWT claims
     request.user = userData;
 
     // Also set jwt.user property for consistency with fastify.authenticate
@@ -117,8 +128,8 @@ export function authorizeRoles(
     }
 
     // Check if user has any of the allowed roles
-    const allowedRoles = Array.isArray(roles) ? roles : [roles];
-    if (!allowedRoles.includes(request.user.role)) {
+    const allowedRoles: Role[] = Array.isArray(roles) ? roles : [roles];
+    if (!allowedRoles.includes(request.user.role as Role)) {
       return reply.status(403).send({
         statusCode: 403,
         error: 'Forbidden',
@@ -128,12 +139,5 @@ export function authorizeRoles(
   };
 }
 
-// Public routes that don't require authentication
-export const publicRoutes = [
-  '/api/auth/login',
-  '/api/auth/register',
-  '/api/auth/google',
-  '/api/auth/google/callback',
-  '/api/auth/refresh',
-  '/', // Root path for health check
-];
+// Note: Public routes are now configured in src/config/index.ts
+// This allows for environment-specific configuration and better maintainability
