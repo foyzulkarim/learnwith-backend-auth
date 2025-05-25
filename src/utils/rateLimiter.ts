@@ -5,8 +5,6 @@ interface RateLimitOptions {
   windowMs: number; // Time window in milliseconds
   maxRequests: number; // Maximum number of requests per window
   message?: string;
-  skipSuccessfulRequests?: boolean;
-  skipFailedRequests?: boolean;
 }
 
 interface RequestRecord {
@@ -31,13 +29,7 @@ setInterval(() => {
  * Rate limiting middleware
  */
 export function rateLimit(options: RateLimitOptions) {
-  const {
-    windowMs,
-    maxRequests,
-    message = 'Too many requests, please try again later.',
-    skipSuccessfulRequests = false,
-    skipFailedRequests = false,
-  } = options;
+  const { windowMs, maxRequests, message = 'Too many requests, please try again later.' } = options;
 
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const clientIP = request.ip;
@@ -75,23 +67,6 @@ export function rateLimit(options: RateLimitOptions) {
     reply.header('X-RateLimit-Limit', maxRequests);
     reply.header('X-RateLimit-Remaining', Math.max(0, maxRequests - record.count));
     reply.header('X-RateLimit-Reset', Math.ceil((record.resetTime - now) / 1000));
-
-    // Hook to handle successful/failed responses
-    reply.addHook('onSend', async (request, reply, payload) => {
-      const statusCode = reply.statusCode;
-      const isSuccess = statusCode >= 200 && statusCode < 300;
-      const isError = statusCode >= 400;
-
-      // Optionally skip counting successful or failed requests
-      if ((skipSuccessfulRequests && isSuccess) || (skipFailedRequests && isError)) {
-        const currentRecord = requestStore.get(key);
-        if (currentRecord && currentRecord.count > 0) {
-          currentRecord.count--;
-        }
-      }
-
-      return payload;
-    });
   };
 }
 
