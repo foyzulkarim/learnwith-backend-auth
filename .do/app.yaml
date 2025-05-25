@@ -1,0 +1,57 @@
+# Digital Ocean App Platform specification
+name: learnwith-backend
+services:
+- name: api
+  source_dir: /
+  github:
+    repo: your-username/your-repo-name
+    branch: main
+  run_command: npm start
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 8080
+  health_check:
+    http_path: /
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "8080"
+  - key: DATABASE_URL
+    value: ${DATABASE_URL}
+    type: SECRET
+  - key: JWT_SECRET
+    value: ${JWT_SECRET}
+    type: SECRET
+  - key: FRONTEND_URL
+    value: ${FRONTEND_URL}
+  - key: ALLOWED_ORIGINS
+    value: ${ALLOWED_ORIGINS}
+  - key: COOKIE_SAME_SITE
+    value: none
+  - key: GOOGLE_CLIENT_ID
+    value: ${GOOGLE_CLIENT_ID}
+    type: SECRET
+  - key: GOOGLE_CLIENT_SECRET
+    value: ${GOOGLE_CLIENT_SECRET}
+    type: SECRET
+  - key: GOOGLE_CALLBACK_URL
+    value: ${GOOGLE_CALLBACK_URL}
+  - key: JWT_ACCESS_TOKEN_EXPIRY
+    value: 1h
+  - key: JWT_REFRESH_TOKEN_EXPIRY
+    value: 7d
+  - key: CLOUDFLARE_ACCOUNT_ID
+    value: ${CLOUDFLARE_ACCOUNT_ID}
+    type: SECRET
+  - key: R2_ACCESS_KEY_ID
+    value: ${R2_ACCESS_KEY_ID}
+    type: SECRET
+  - key: R2_SECRET_ACCESS_KEY
+    value: ${R2_SECRET_ACCESS_KEY}
+    type: SECRET
+  - key: R2_BUCKET_NAME
+    value: ${R2_BUCKET_NAME}
+  - key: SIGNED_URL_EXPIRATION
+    value: "3600"
