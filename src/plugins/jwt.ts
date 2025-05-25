@@ -43,6 +43,7 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
       cookieName: 'auth_token', // The name of the cookie set in auth.controller.ts
       signed: false, // We're not signing the cookie as we're using httpOnly instead
     },
+    decode: { complete: true }, // Include header and signature in decoded value
     // Add verify options if needed
   });
 
@@ -51,16 +52,31 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
     'authenticate',
     async function (request: FastifyRequest, _reply: FastifyReply): Promise<void> {
       try {
-        // First check for token in cookie, then fall back to Authorization header
-        await request.jwtVerify();
+        // Extract token from Authorization header or cookie
+        let token: string | undefined;
+        const authHeader = request.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          token = authHeader.split(' ')[1];
+        } else if (request.cookies && request.cookies.auth_token) {
+          token = request.cookies.auth_token;
+        }
+
+        if (!token) {
+          throw new AuthenticationError('Authentication token is missing', 'MISSING_TOKEN');
+        }
+
+        // Verify token
+        const decoded = await fastify.jwt.verify<UserJWTPayload>(token);
+
         // Attach user payload to request for easier access in handlers
-        // Note: The type assertion might be needed depending on exact @fastify/jwt setup
-        request.jwt = { user: request.user as UserJWTPayload };
+        request.jwt = { user: decoded };
+
+        // Also set user property for convenience and backward compatibility
+        request.user = decoded;
       } catch (err) {
         fastify.log.warn({ err, requestId: request.id }, 'Authentication failed');
-        // Instead of handling the error here, throw our custom AuthenticationError
-        // that will be caught by the global error handler
-        throw new AuthenticationError('Invalid or missing authentication token', 'INVALID_TOKEN');
+        // Throw our custom AuthenticationError that will be caught by the global error handler
+        throw new AuthenticationError('Invalid or expired authentication token', 'INVALID_TOKEN');
       }
     },
   );

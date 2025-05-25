@@ -23,6 +23,9 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
   // Callback route where Google redirects the user back
   fastify.get('/google/callback', authController.googleCallbackHandler.bind(authController));
 
+  // Refresh token route
+  fastify.post('/refresh', authController.refreshTokenHandler.bind(authController));
+
   // --- Example Protected Routes ---
   // Example route demonstrating JWT authentication check with user data
   fastify.get('/me', { preHandler: [fastify.authenticate] }, async (request, _reply) => {

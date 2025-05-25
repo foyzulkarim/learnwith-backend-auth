@@ -80,4 +80,39 @@ export class AuthController {
     reply.clearCookie('refresh_token', getCookieConfig());
     reply.send({ message: 'Logged out successfully' });
   }
+
+  // Refresh token handler
+  async refreshTokenHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const fastify = request.server;
+    try {
+      // Extract refresh token from cookie
+      const refreshToken = request.cookies.refresh_token;
+      if (!refreshToken) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Refresh token is missing.',
+        });
+      }
+
+      // Verify refresh token and get new tokens
+      const { accessToken, refreshToken: newRefreshToken } =
+        await this.authService.refreshToken(refreshToken);
+
+      // Set the new JWT token in HTTP-only cookie
+      reply.setCookie('auth_token', accessToken, getCookieConfig());
+
+      // Set the new refresh token in HTTP-only cookie
+      reply.setCookie('refresh_token', newRefreshToken, getCookieConfig());
+
+      reply.send({ message: 'Token refreshed successfully' });
+    } catch (error) {
+      fastify.log.error({ err: error }, 'Token refresh error');
+      reply.status(401).send({
+        statusCode: 401,
+        error: 'Unauthorized',
+        message: 'Invalid or expired refresh token.',
+      });
+    }
+  }
 }

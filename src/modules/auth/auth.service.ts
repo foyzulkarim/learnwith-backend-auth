@@ -118,28 +118,27 @@ export class AuthService {
    * @returns The new access token and refresh token
    */
   async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const fastify = this.fastify;
+
     try {
       // Verify the refresh token
-      const decoded = (await this.fastify.jwt.verify(refreshToken)) as UserJWTPayload;
+      const decoded = await fastify.jwt.verify(refreshToken);
 
-      // Check if the user still exists in the database
+      if (!decoded || typeof decoded !== 'object') {
+        throw new AuthenticationError('Invalid token format', 'INVALID_TOKEN_FORMAT');
+      }
+
+      // Find the user in database using the id from the token payload
       const user = await this.userService.findUserById(decoded.id);
       if (!user) {
-        throw new NotFoundError('User not found', 'USER_NOT_FOUND');
+        throw new AuthenticationError('User not found', 'USER_NOT_FOUND');
       }
 
-      // Generate new tokens for the user
+      // Generate new tokens using the existing method
       return this.generateTokens(user);
     } catch (error) {
-      this.fastify.log.error({ err: error }, 'Error refreshing token');
-
-      // If it's already a NotFoundError, rethrow it
-      if (error instanceof NotFoundError) {
-        throw error;
-      }
-
-      // Otherwise throw an authentication error
-      throw new AuthenticationError('Invalid or expired refresh token', 'INVALID_REFRESH_TOKEN');
+      fastify.log.error({ err: error }, 'Token refresh failed');
+      throw new AuthenticationError('Invalid refresh token', 'INVALID_REFRESH_TOKEN');
     }
   }
 
