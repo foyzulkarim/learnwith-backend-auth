@@ -6,6 +6,7 @@ import {
   validateModuleId,
   validateLessonId,
   authorizeRoles,
+  authenticate,
 } from '../../utils/middleware';
 import {
   getCourseSchema,
@@ -22,6 +23,11 @@ import {
 export default async function courseRoutes(fastify: FastifyInstance): Promise<void> {
   const courseService = new CourseService(fastify);
   const courseController = new CourseController(courseService);
+
+  // Create a preHandler wrapper for authentication
+  const authPreHandler = async (request: any, reply: any) => {
+    await authenticate(request, reply);
+  };
 
   // Authentication is now handled globally in app.ts
 
@@ -44,7 +50,7 @@ export default async function courseRoutes(fastify: FastifyInstance): Promise<vo
     '/',
     {
       schema: createCourseSchema,
-      preHandler: [authorizeRoles(['creator', 'admin'])],
+      preHandler: [authPreHandler, authorizeRoles(['creator', 'admin'])],
     },
     courseController.createCourseHandler,
   );
@@ -54,7 +60,7 @@ export default async function courseRoutes(fastify: FastifyInstance): Promise<vo
     '/:courseId',
     {
       schema: updateCourseSchema,
-      preHandler: [validateCourseId, authorizeRoles(['creator', 'admin'])],
+      preHandler: [authPreHandler, validateCourseId, authorizeRoles(['creator', 'admin'])],
     },
     courseController.updateCourseHandler,
   );
@@ -64,7 +70,7 @@ export default async function courseRoutes(fastify: FastifyInstance): Promise<vo
     '/:courseId',
     {
       schema: getCourseSchema,
-      preHandler: validateCourseId,
+      preHandler: [authPreHandler, validateCourseId, authorizeRoles(['creator', 'admin'])],
     },
     courseController.deleteCourseHandler,
   );
@@ -86,7 +92,7 @@ export default async function courseRoutes(fastify: FastifyInstance): Promise<vo
     '/:courseId/modules',
     {
       schema: createModuleSchema,
-      preHandler: [validateCourseId, authorizeRoles(['creator', 'admin'])],
+      preHandler: [authPreHandler, validateCourseId, authorizeRoles(['creator', 'admin'])],
     },
     courseController.createModuleHandler,
   );
@@ -96,7 +102,12 @@ export default async function courseRoutes(fastify: FastifyInstance): Promise<vo
     '/:courseId/modules/:moduleId',
     {
       schema: updateModuleSchema,
-      preHandler: [validateCourseId, validateModuleId, authorizeRoles(['creator', 'admin'])],
+      preHandler: [
+        authPreHandler,
+        validateCourseId,
+        validateModuleId,
+        authorizeRoles(['creator', 'admin']),
+      ],
     },
     courseController.updateModuleHandler,
   );
@@ -106,7 +117,12 @@ export default async function courseRoutes(fastify: FastifyInstance): Promise<vo
     '/:courseId/modules/:moduleId',
     {
       schema: getModuleSchema,
-      preHandler: [validateCourseId, validateModuleId],
+      preHandler: [
+        authPreHandler,
+        validateCourseId,
+        validateModuleId,
+        authorizeRoles(['creator', 'admin']),
+      ],
     },
     courseController.deleteModuleHandler,
   );
@@ -127,7 +143,12 @@ export default async function courseRoutes(fastify: FastifyInstance): Promise<vo
     '/:courseId/modules/:moduleId/lessons',
     {
       schema: createLessonSchema,
-      preHandler: [validateCourseId, validateModuleId, authorizeRoles(['creator', 'admin'])],
+      preHandler: [
+        authPreHandler,
+        validateCourseId,
+        validateModuleId,
+        authorizeRoles(['creator', 'admin']),
+      ],
     },
     courseController.createLessonHandler,
   );
@@ -138,6 +159,7 @@ export default async function courseRoutes(fastify: FastifyInstance): Promise<vo
     {
       schema: updateLessonSchema,
       preHandler: [
+        authPreHandler,
         validateCourseId,
         validateModuleId,
         validateLessonId,
@@ -153,6 +175,7 @@ export default async function courseRoutes(fastify: FastifyInstance): Promise<vo
     {
       schema: getLessonSchema,
       preHandler: [
+        authPreHandler,
         validateCourseId,
         validateModuleId,
         validateLessonId,
