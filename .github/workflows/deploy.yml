@@ -1,4 +1,4 @@
-name: Deploy to VPS via SSH
+name: Deploy Backend to VPS (Password Auth)
 
 on:
   push:
@@ -12,20 +12,16 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up SSH
-        uses: shimataro/ssh-key-action@v2
-        with:
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          known_hosts: 'just-a-placeholder-so-known-hosts-is-not-empty'
-
-      - name: Deploy to VPS
-        uses: appleboy/ssh-action@master
+      - name: Deploy to VPS via SSH using Password
+        uses: appleboy/ssh-action@v4
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           port: ${{ secrets.SSH_PORT }}
+          password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd ~/backend
-            git pull
+            git pull origin main
             npm install
-            pm2 restart dist/server.js
+            npm run build
+            pm2 restart dist/server.js --no-daemon
