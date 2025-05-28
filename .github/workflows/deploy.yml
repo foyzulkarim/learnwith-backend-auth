@@ -24,4 +24,5 @@ jobs:
             git pull origin main
             npm install
             npm run build
-            pm2 restart dist/server.js --no-daemon
+            pm2 restart dist/server.js
+            echo "Deployed successfully"
