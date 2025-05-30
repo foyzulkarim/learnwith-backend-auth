@@ -217,7 +217,14 @@ github:
 
 - **Database**: Use MongoDB Atlas for managed database service
 - **Monitoring**: Enable Digital Ocean monitoring and alerts
-- **Logging**: Configure structured logging for production
+- **Logging**:
+  - The application uses Pino for structured logging.
+  - In development, logs are pretty-printed to the console.
+  - In production, logs are output as JSON by default.
+  - **Loggly Integration**: For centralized logging in production, you can configure Loggly by setting the following environment variables:
+    - `LOGGLY_TOKEN`: Your Loggly customer token.
+    - `LOGGLY_SUBDOMAIN`: Your Loggly subdomain.
+    When these variables are set, the application will automatically send logs to Loggly.
 - **Security**: Enable HTTPS and configure proper CORS settings
 - **Backup**: Set up automated database backups
 - **Rate Limiting**: The app includes built-in rate limiting middleware

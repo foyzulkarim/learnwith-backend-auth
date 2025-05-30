@@ -1,5 +1,6 @@
 // src/app.ts
 import Fastify, { FastifyInstance } from 'fastify';
+import pinoLoggly from 'pino-loggly';
 import { config, isDev } from './config'; // Load validated config
 import { isAppError, convertToAppError } from './utils/errors'; // Import error utilities
 
@@ -16,11 +17,28 @@ import hlsRoutes from './modules/course/hls.route';
 // Import other module routes (e.g., userRoutes) if you have them
 
 export function buildApp(): FastifyInstance {
+  const loggerOptions: any = {
+    level: isDev ? 'info' : 'warn',
+  };
+
+  if (isDev) {
+    loggerOptions.transport = { target: 'pino-pretty' };
+  } else if (config.LOGGLY_TOKEN && config.LOGGLY_SUBDOMAIN) {
+    loggerOptions.transport = {
+      target: 'pino-loggly',
+      options: {
+        token: config.LOGGLY_TOKEN,
+        subdomain: config.LOGGLY_SUBDOMAIN,
+        tags: ['fastify', config.NODE_ENV],
+        json: true,
+      },
+    };
+  }
+  // If not in development and Loggly is not configured,
+  // it will use the default pino logger (JSON to stdout)
+
   const fastify = Fastify({
-    logger: {
-      level: isDev ? 'info' : 'warn',
-      transport: isDev ? { target: 'pino-pretty' } : undefined,
-    },
+    logger: loggerOptions,
   });
 
   // --- Register Plugins ---

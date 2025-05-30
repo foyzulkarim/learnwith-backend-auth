@@ -30,6 +30,10 @@ export const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().min(1, 'R2_SECRET_ACCESS_KEY is required'),
   R2_BUCKET_NAME: z.string().min(1, 'R2_BUCKET_NAME is required'),
   SIGNED_URL_EXPIRATION: z.coerce.number().default(3600), // 1 hour in seconds
+
+  // Loggly Configuration
+  LOGGLY_TOKEN: z.string().min(1, 'LOGGLY_TOKEN is required'),
+  LOGGLY_SUBDOMAIN: z.string().min(1, 'LOGGLY_SUBDOMAIN is required'),
 });
 
 // Example .env file structure:
