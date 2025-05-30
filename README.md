@@ -47,10 +47,20 @@ This is the authentication service for the LearnWith platform, handling user aut
    FRONTEND_URL=http://localhost:5173
    ALLOWED_ORIGINS=http://localhost:5173
 
+   # API Base URL for video streaming
+   API_BASE_URL=http://localhost:4000
+
    # Google OAuth Credentials (Get these from Google Cloud Console)
    GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
    GOOGLE_CLIENT_SECRET=your_google_client_secret
    GOOGLE_CALLBACK_URL=http://localhost:3000/api/auth/google/callback
+
+   # Cloudflare R2 Storage for video streaming
+   CLOUDFLARE_ACCOUNT_ID=your-cloudflare-account-id
+   R2_ACCESS_KEY_ID=your-r2-access-key-id
+   R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+   R2_BUCKET_NAME=your-r2-bucket-name
+   SIGNED_URL_EXPIRATION=3600
    ```
 
 5. Test the database connection:
@@ -152,6 +162,9 @@ R2_ACCESS_KEY_ID=your-r2-access-key-id
 R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
 R2_BUCKET_NAME=your-r2-bucket-name
 SIGNED_URL_EXPIRATION=3600
+
+# Video Streaming API Configuration
+API_BASE_URL=https://your-digital-ocean-app-url.com
 ```
 
 #### GitHub CI/CD Deployment

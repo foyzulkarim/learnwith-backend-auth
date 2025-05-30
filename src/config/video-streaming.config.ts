@@ -10,11 +10,7 @@ const videoStreamingConfigSchema = z.object({
   R2_BUCKET_NAME: z.string().min(1, 'R2 Bucket Name is required'),
 
   // API configuration
-  API_BASE_URL: z
-    .string()
-    .url('API Base URL must be a valid URL')
-    .optional()
-    .default('http://localhost:4000'),
+  API_BASE_URL: z.string().url('API Base URL must be a valid URL'),
 
   // Signed URL options
   SIGNED_URL_EXPIRATION: z
@@ -68,7 +64,7 @@ You can add these to your .env file or configure them in your deployment environ
       R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID || '',
       R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY || '',
       R2_BUCKET_NAME: process.env.R2_BUCKET_NAME || '',
-      API_BASE_URL: process.env.API_BASE_URL || 'http://localhost:4000',
+      API_BASE_URL: process.env.API_BASE_URL || '',
       SIGNED_URL_EXPIRATION: parseInt(process.env.SIGNED_URL_EXPIRATION || '3600', 10),
     };
   }
