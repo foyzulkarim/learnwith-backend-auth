@@ -9,6 +9,10 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
   FRONTEND_URL: z.string().url().default('http://localhost:3030'), // URL of your frontend app
   ALLOWED_ORIGINS: z.string().optional().default('http://localhost:3030'), // Comma-separated list of allowed origins for CORS
+  
+  // Loggly Integration
+  LOGGLY_TOKEN: z.string().optional(), // Loggly Customer Token
+  LOGGLY_SUBDOMAIN: z.string().optional(), // Loggly Subdomain
 
   // Google OAuth Credentials
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
@@ -48,4 +52,8 @@ GOOGLE_CALLBACK_URL="http://localhost:3000/api/auth/google/callback" # Adjust fo
 JWT_ACCESS_TOKEN_EXPIRY="1h"
 JWT_REFRESH_TOKEN_EXPIRY="7d"
 COOKIE_SAME_SITE="lax"
+
+# Loggly integration (optional, recommended for production)
+# LOGGLY_TOKEN="your_loggly_customer_token" 
+# LOGGLY_SUBDOMAIN="your_subdomain"
 */

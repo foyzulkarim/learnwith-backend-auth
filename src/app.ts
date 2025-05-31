@@ -1,7 +1,12 @@
 // src/app.ts
 import Fastify, { FastifyInstance } from 'fastify';
+import { nanoid } from 'nanoid'; // Import nanoid for request IDs
 import { config, isDev } from './config'; // Load validated config
 import { isAppError, convertToAppError } from './utils/errors'; // Import error utilities
+import { logger } from './utils/logger'; // Import centralized logger
+import { logSystemInfo } from './utils/logglyHelper'; // Import Loggly helpers
+import { registerRequestContextMiddleware } from './utils/requestContextMiddleware'; // Request context middleware
+import { registerLogglyHealthRoutes } from './utils/logglyHealth'; // Loggly health check
 
 // Import plugins
 import jwtPlugin from './plugins/jwt';
@@ -16,12 +21,15 @@ import hlsRoutes from './modules/course/hls.route';
 // Import other module routes (e.g., userRoutes) if you have them
 
 export function buildApp(): FastifyInstance {
+  // Use the centralized logger instance that supports Loggly
   const fastify = Fastify({
-    logger: {
-      level: isDev ? 'info' : 'warn',
-      transport: isDev ? { target: 'pino-pretty' } : undefined,
-    },
+    logger,
+    // Generate request IDs for better tracing in logs
+    genReqId: () => nanoid(10)
   });
+
+  // Register request context middleware early to ensure all requests are properly traced
+  registerRequestContextMiddleware(fastify);
 
   // --- Register Plugins ---
   // Register MongoDB connection first as other services/routes might depend on it
@@ -106,6 +114,14 @@ export function buildApp(): FastifyInstance {
   fastify.get('/', async (_request, _reply) => {
     return { message: 'Authentication Service Running' };
   });
+  
+  // Register health check routes
+  fastify.get('/api/health', async (_request, reply) => {
+    return reply.send({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+  
+  // Register Loggly-specific health check
+  registerLogglyHealthRoutes(fastify);
 
   // --- Error Handling (Optional but Recommended) ---
   fastify.setErrorHandler((error, request, reply) => {
@@ -156,6 +172,9 @@ export function buildApp(): FastifyInstance {
   });
 
   fastify.log.info('Fastify server initialized');
+  
+  // Log system information with Loggly integration if configured
+  logSystemInfo(fastify);
 
   return fastify;
 }

@@ -11,6 +11,7 @@ This is the authentication service for the LearnWith platform, handling user aut
 - **Mongoose**: MongoDB ODM
 - **@fastify/oauth2**: OAuth authentication
 - **JWT**: JSON Web Tokens for authentication
+- **Pino**: Logging with optional Loggly integration
 
 ## Getting Started
 
@@ -61,6 +62,10 @@ This is the authentication service for the LearnWith platform, handling user aut
    R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
    R2_BUCKET_NAME=your-r2-bucket-name
    SIGNED_URL_EXPIRATION=3600
+   
+   # For production environments, configure Loggly integration
+   # LOGGLY_TOKEN=your_loggly_customer_token
+   # LOGGLY_SUBDOMAIN=your_loggly_subdomain
    ```
 
 5. Test the database connection:
@@ -72,6 +77,25 @@ This is the authentication service for the LearnWith platform, handling user aut
    ```bash
    npm run dev
    ```
+
+## Logging
+
+This application uses Pino for logging with the following features:
+
+- **Development**: Logs are formatted with pino-pretty for better readability
+- **Production**: Production-optimized logging with appropriate log levels
+- **Loggly Integration**: When `LOGGLY_TOKEN` and `LOGGLY_SUBDOMAIN` environment variables are set, logs are automatically sent to Loggly
+
+### Configuring Loggly
+
+1. Sign up for a [Loggly](https://www.loggly.com/) account (free tier available)
+2. Obtain your Loggly Customer Token from your Loggly account dashboard
+3. Add to your .env file:
+   ```
+   LOGGLY_TOKEN=your_loggly_customer_token
+   LOGGLY_SUBDOMAIN=your_loggly_subdomain
+   ```
+4. Restart the server - logs will now be sent to both console and Loggly
 
 ## Authentication Flow
 

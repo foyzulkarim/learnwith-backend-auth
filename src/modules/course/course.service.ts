@@ -19,11 +19,14 @@ export class CourseService {
   }
 
   async getAllCourses(page: number = 1, limit: number = 10) {
+    this.fastify.log.debug({ page, limit }, 'Getting paginated courses');
+    
     // Calculate skip value for pagination
     const skip = (page - 1) * limit;
 
     // Get total count for pagination
     const total = await this.courseModel.countDocuments();
+    this.fastify.log.debug({ total }, 'Total course count retrieved');
 
     // Get courses with pagination
     const courses = await this.courseModel
@@ -32,6 +35,8 @@ export class CourseService {
       .skip(skip)
       .limit(limit)
       .lean();
+      
+    this.fastify.log.debug({ coursesCount: courses.length }, 'Courses retrieved successfully');
 
     return {
       courses: courses.map((course) => ({
@@ -70,20 +75,37 @@ export class CourseService {
   }
 
   async createCourse(courseData: CreateCoursePayload): Promise<Course> {
-    const course = await this.courseModel.create({
-      ...courseData,
-      modules: [],
-      totalLessons: 0,
-      studentCount: 0,
-      // Set default values for any missing fields
-      featured: courseData.featured || false,
-      bestseller: courseData.bestseller || false,
-      newCourse: courseData.newCourse || false,
-      language: courseData.language || 'English',
-    });
+    this.fastify.log.info({ 
+      title: courseData.title,
+      instructor: courseData.instructor,
+      category: courseData.category
+    }, 'Creating new course');
+    
+    try {
+      const course = await this.courseModel.create({
+        ...courseData,
+        modules: [],
+        totalLessons: 0,
+        studentCount: 0,
+        // Set default values for any missing fields
+        featured: courseData.featured || false,
+        bestseller: courseData.bestseller || false,
+        newCourse: courseData.newCourse || false,
+        language: courseData.language || 'English',
+      });
+      
+      this.fastify.log.info({ courseId: course._id.toString() }, 'Course created successfully');
 
-    // Transform the MongoDB document to match the Course type
-    const courseObj = course.toObject();
+      // Transform the MongoDB document to match the Course type
+      const courseObj = course.toObject();
+      return CourseHelpers.transformCourseDocument(courseObj);
+    } catch (error) {
+      this.fastify.log.error({ 
+        err: error,
+        title: courseData.title
+      }, 'Failed to create course');
+      throw error;
+    }
     return {
       ...courseObj,
       _id: courseObj._id.toString(),

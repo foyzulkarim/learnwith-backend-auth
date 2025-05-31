@@ -26,17 +26,35 @@ export class AuthService {
   async processGoogleLogin(
     googleProfile: GoogleUserProfile,
   ): Promise<{ accessToken: string; refreshToken: string }> {
+    const googleId = googleProfile.sub || googleProfile.id;
+    const email = googleProfile.email || 
+      (googleProfile.emails && googleProfile.emails.length > 0 ? googleProfile.emails[0].value : undefined);
+      
+    this.fastify.log.info({ 
+      googleId: googleId?.substring(0, 5) + '...', // Only log part of the ID for privacy
+      hasEmail: !!email,
+      emailVerified: googleProfile.email_verified 
+    }, 'Processing Google login');
+
     try {
       // Validate Google profile has all required fields
       this.validateGoogleProfile(googleProfile);
+      this.fastify.log.debug('Google profile validated successfully');
 
       // Find or create user in the database using the original Google profile
       const user = await this.userService.findOrCreateUserByGoogleProfile(googleProfile);
+      this.fastify.log.info({ userId: user.id, role: user.role }, 'User found or created successfully');
 
       // Generate tokens for the user
-      return this.generateTokens(user);
+      const tokens = await this.generateTokens(user);
+      this.fastify.log.debug({ userId: user.id }, 'JWT tokens generated successfully');
+      
+      return tokens;
     } catch (error) {
-      this.fastify.log.error({ err: error }, 'Error processing Google login');
+      this.fastify.log.error({ 
+        err: error,
+        googleId: googleId?.substring(0, 5) + '...' // Only log part of the ID for privacy
+      }, 'Error processing Google login');
 
       // If it's already one of our custom errors, rethrow it
       if (
@@ -92,6 +110,8 @@ export class AuthService {
    * @returns Access token and refresh token
    */
   private async generateTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
+    this.fastify.log.debug({ userId: user.id }, 'Generating JWT tokens');
+    
     // Prepare JWT payload
     const payload: UserJWTPayload = {
       id: user.id,
@@ -101,12 +121,21 @@ export class AuthService {
     };
 
     // Generate JWTs with expiry times from config
+    const accessTokenExpiry = config.JWT_ACCESS_TOKEN_EXPIRY;
+    const refreshTokenExpiry = config.JWT_REFRESH_TOKEN_EXPIRY;
+    
+    this.fastify.log.debug({ 
+      userId: user.id, 
+      accessTokenExpiry,
+      refreshTokenExpiry
+    }, 'Signing tokens with configured expiration times');
+
     const accessToken = await this.fastify.jwt.sign(payload, {
-      expiresIn: config.JWT_ACCESS_TOKEN_EXPIRY,
+      expiresIn: accessTokenExpiry,
     });
 
     const refreshToken = await this.fastify.jwt.sign(payload, {
-      expiresIn: config.JWT_REFRESH_TOKEN_EXPIRY,
+      expiresIn: refreshTokenExpiry,
     });
 
     return { accessToken, refreshToken };

@@ -38,9 +38,12 @@ export class UserService {
    */
   async findOrCreateUserByGoogleProfile(profile: GoogleUserProfile): Promise<User> {
     try {
+      this.fastify.log.debug('Processing Google profile for user lookup/creation');
+      
       // Get the Google ID (sub is the OpenID Connect standard)
       const googleId = profile.sub || profile.id;
       if (!googleId) {
+        this.fastify.log.warn('Google profile missing ID field');
         throw new ValidationError('Google profile ID is missing.', 'GOOGLE_PROFILE_INVALID');
       }
 
@@ -50,8 +53,14 @@ export class UserService {
         (profile.emails && profile.emails.length > 0 ? profile.emails[0].value : undefined);
 
       if (!email) {
+        this.fastify.log.warn({ googleId: googleId.substring(0, 5) + '...' }, 'Google profile missing email');
         throw new ValidationError('Google profile email is missing.', 'GOOGLE_PROFILE_INVALID');
       }
+
+      this.fastify.log.debug({ 
+        emailHash: email.split('@')[0].substring(0, 3) + '...@' + email.split('@')[1],  // Privacy-conscious logging
+        hasGoogleId: !!googleId
+      }, 'Processing Google profile data');
 
       // Get the name
       const name =
