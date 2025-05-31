@@ -10,6 +10,7 @@ import {
   getCorrelationContext,
 } from './correlationContext';
 import { asyncLocalStorage, runWithCorrelationContext } from './logger';
+import { getCorrelationId } from './logging';
 
 // Extend FastifyRequest type to include correlation context
 declare module 'fastify' {
@@ -181,6 +182,18 @@ export function registerRequestContextMiddleware(fastify: FastifyInstance): void
           },
           `Request completed in ${duration}ms`,
         );
+      }
+
+      // Add correlation ID to response headers for debugging
+      try {
+        const correlationId = getCorrelationId();
+        if (correlationId) {
+          reply.header('X-Correlation-ID', correlationId);
+        }
+      } catch (err) {
+        // Ignore errors from getCorrelationId if it's not fully implemented yet
+        // eslint-disable-next-line no-console
+        console.error('Error retrieving correlation ID:', err);
       }
     }
 

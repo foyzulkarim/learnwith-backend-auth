@@ -4,11 +4,11 @@ import fs from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
 import { logRotationManager } from './logRotation';
 import { createLogglyTransport } from './logglyTransport';
+import { LOG_DIR, LOG_LEVEL, LOGGLY_CONFIG } from './logConfig';
 
 // Ensure logs directory exists
-const logsDir = path.join(process.cwd(), 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+if (!fs.existsSync(LOG_DIR)) {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
 // Run cleanup on startup
@@ -16,18 +16,18 @@ logRotationManager.cleanupOldLogs().catch((error) => {
   console.error('Error during startup log cleanup:', error);
 });
 
-// Determine the log level based on the environment
-const level = process.env.NODE_ENV === 'production' ? 'info' : 'debug';
+// Get log level and environment from centralized config
+const level = LOG_LEVEL;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Create rotating log file name (daily rotation)
 const getLogFileName = () => {
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-  return path.join(logsDir, `app-${today}.log`);
+  return path.join(LOG_DIR, `app-${today}.log`);
 };
 
-// Check if Loggly is configured
-const hasLoggly = Boolean(process.env.LOGGLY_TOKEN && process.env.LOGGLY_SUBDOMAIN);
+// Check if Loggly is configured from centralized config
+const hasLoggly = LOGGLY_CONFIG.enabled;
 
 // AsyncLocalStorage for correlation context
 interface CorrelationStore {
@@ -65,6 +65,8 @@ const withCorrelationContext = (obj: any = {}) => {
     url: context.url,
   };
 };
+
+// Import masking functions from centralized config
 
 // Utility functions for masking sensitive data
 function maskUserId(userId: string): string {
@@ -129,11 +131,11 @@ let baseLogger: pino.Logger;
 if (isProduction) {
   // Production: File logging + optional Loggly
   if (hasLoggly) {
-    // Create multistream with file and Loggly
+    // Create multistream with file and Loggly using centralized config
     const logglyTransport = createLogglyTransport({
-      token: process.env.LOGGLY_TOKEN!,
-      subdomain: process.env.LOGGLY_SUBDOMAIN!,
-      tags: ['nodejs', 'learnwith-backend', 'production'],
+      token: LOGGLY_CONFIG.token,
+      subdomain: LOGGLY_CONFIG.subdomain,
+      tags: [...LOGGLY_CONFIG.tags, isProduction ? 'production' : 'development'],
     });
 
     // Create a multistream to send logs to both file and Loggly
