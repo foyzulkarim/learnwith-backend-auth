@@ -2,11 +2,14 @@ import { FastifyInstance } from 'fastify';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { videoStreamingConfig } from '../../config/video-streaming.config';
+import { withLogglyTags } from '../../utils/logglyHelper';
+import { createServiceLogger } from '../../utils/logger';
 
 export class ImprovedVideoStreamingService {
   private s3Client: S3Client;
   private bucketName: string;
   private signedUrlExpiration: number;
+  private logger = createServiceLogger('VideoStreamingService');
 
   constructor(private fastify: FastifyInstance) {
     // Get validated config
@@ -26,7 +29,14 @@ export class ImprovedVideoStreamingService {
     // Convert string to number
     this.signedUrlExpiration = Number(config.SIGNED_URL_EXPIRATION);
 
-    this.fastify.log.info('S3 client initialized with bucket: ' + this.bucketName);
+    this.logger.info(
+      {
+        bucketName: this.bucketName,
+        expiration: this.signedUrlExpiration,
+        ...withLogglyTags(['video', 'r2-client-init']),
+      },
+      'S3 client initialized for video streaming',
+    );
   }
 
   /**
@@ -39,13 +49,42 @@ export class ImprovedVideoStreamingService {
         Key: objectKey,
       });
 
-      this.fastify.log.info(`Generating signed URL for: ${objectKey}`);
+      this.logger.debug(
+        {
+          objectKey,
+          bucket: this.bucketName,
+          expiration: this.signedUrlExpiration,
+          ...withLogglyTags(['video', 'signed-url-request']),
+        },
+        'Generating signed URL for video segment',
+      );
 
-      return getSignedUrl(this.s3Client, command, {
+      const url = await getSignedUrl(this.s3Client, command, {
         expiresIn: this.signedUrlExpiration,
       });
+
+      // Don't log the full URL as it contains sensitive signature information
+      this.logger.debug(
+        {
+          objectKey,
+          urlLength: url.length,
+          ...withLogglyTags(['video', 'signed-url-generated']),
+        },
+        'Generated signed URL successfully',
+      );
+
+      return url;
     } catch (error) {
-      this.fastify.log.error(`Failed to generate signed URL: ${error}`);
+      this.logger.error(
+        {
+          err: error,
+          objectKey,
+          bucket: this.bucketName,
+          ...withLogglyTags(['video', 'signed-url-error']),
+        },
+        'Failed to generate signed URL',
+      );
+
       throw new Error(`Failed to generate signed URL: ${(error as Error).message}`);
     }
   }

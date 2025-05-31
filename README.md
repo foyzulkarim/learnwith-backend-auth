@@ -78,24 +78,65 @@ This is the authentication service for the LearnWith platform, handling user aut
    npm run dev
    ```
 
-## Logging
+## 🪵 Logging
 
-This application uses Pino for logging with the following features:
+This application uses [Pino](https://getpino.io/) for high-performance logging with the following features:
 
-- **Development**: Logs are formatted with pino-pretty for better readability
-- **Production**: Production-optimized logging with appropriate log levels
-- **Loggly Integration**: When `LOGGLY_TOKEN` and `LOGGLY_SUBDOMAIN` environment variables are set, logs are automatically sent to Loggly
+### Features
+- **Daily log rotation** - Logs are automatically rotated daily with 7-day retention
+- **Development mode**: Pretty-printed console output + file logging
+- **Production mode**: Structured JSON logging to files
+- **Automatic cleanup**: Old log files are automatically cleaned up
 
-### Configuring Loggly
+### Configuration
 
+The logger is configured via environment variables:
+
+```bash
+# Log level (trace, debug, info, warn, error, fatal)
+PINO_LOG_LEVEL=info
+
+# Node environment (affects logging behavior)
+NODE_ENV=production
+```
+
+### Loggly Integration
+
+✅ **Loggly integration is now fully functional!**
+
+**Current Setup**: 
+- Logs are written to daily rotating files in the `logs/` directory
+- When `LOGGLY_TOKEN` and `LOGGLY_SUBDOMAIN` are configured, logs are **simultaneously sent to Loggly** via HTTPS
+
+**To Enable Loggly**:
 1. Sign up for a [Loggly](https://www.loggly.com/) account (free tier available)
-2. Obtain your Loggly Customer Token from your Loggly account dashboard
-3. Add to your .env file:
-   ```
+2. Get your Customer Token from your Loggly dashboard
+3. Add to your `.env` file:
+   ```bash
    LOGGLY_TOKEN=your_loggly_customer_token
    LOGGLY_SUBDOMAIN=your_loggly_subdomain
    ```
-4. Restart the server - logs will now be sent to both console and Loggly
+4. Restart the application - logs will now be sent to both files and Loggly!
+
+**Features**:
+- ✅ Real-time log shipping to Loggly via HTTPS
+- ✅ Automatic retry and error handling
+- ✅ Tagged with `nodejs`, `learnwith-backend`, `production` for easy filtering
+- ✅ No impact on application performance (async HTTP requests)
+- ✅ Fallback to file-only logging if Loggly is unavailable
+
+### Scripts
+
+```bash
+# Run in development mode
+npm run dev
+
+# Run in production mode locally (for testing)
+npm run dev:prod
+
+# Manually clean up old logs
+npm run logs:cleanup
+```
 
 ## Authentication Flow
 

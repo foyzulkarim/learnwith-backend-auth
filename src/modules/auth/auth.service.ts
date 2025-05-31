@@ -1,175 +1,388 @@
 // src/modules/auth/auth.service.ts
-import { FastifyInstance } from 'fastify';
-import { UserService, GoogleUserProfile } from '../user/user.service'; // Import UserService
-import { UserJWTPayload } from '../../plugins/jwt'; // Import JWT payload type
-import { User } from '../user/types';
-import {
-  AuthenticationError,
-  ValidationError,
-  NotFoundError,
-  ExternalServiceError,
-} from '../../utils/errors';
+import { FastifyInstance, FastifyRequest } from 'fastify';
+import { UserService } from '../user/user.service'; // Import UserService
+import { SessionService } from '../user/session.service'; // Import SessionService
+import { UserDocument } from '../user/user.model'; // Import UserDocument type
 import { config } from '../../config';
+import jwt from 'jsonwebtoken';
+import { createServiceLogger } from '../../utils/logger';
+
+interface GoogleProfile {
+  id?: string;
+  sub?: string;
+  email?: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+  picture?: string;
+  email_verified?: boolean;
+}
+
+interface AuthResult {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+  };
+  accessToken: string;
+  refreshToken: string;
+}
 
 export class AuthService {
-  // Inject dependencies (Fastify instance for JWT signing, UserService)
-  constructor(
-    private fastify: FastifyInstance,
-    private userService: UserService,
-  ) {}
+  private userService: UserService;
+  private sessionService: SessionService;
+  private logger = createServiceLogger('AuthService');
 
-  /**
-   * Processes Google user profile, finds/creates user, and generates JWT.
-   * @param googleProfile - User profile data from Google.
-   * @returns The generated JWTs (accessToken and refreshToken).
-   */
-  async processGoogleLogin(
-    googleProfile: GoogleUserProfile,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
-    const googleId = googleProfile.sub || googleProfile.id;
-    const email = googleProfile.email || 
-      (googleProfile.emails && googleProfile.emails.length > 0 ? googleProfile.emails[0].value : undefined);
-      
-    this.fastify.log.info({ 
-      googleId: googleId?.substring(0, 5) + '...', // Only log part of the ID for privacy
-      hasEmail: !!email,
-      emailVerified: googleProfile.email_verified 
-    }, 'Processing Google login');
-
-    try {
-      // Validate Google profile has all required fields
-      this.validateGoogleProfile(googleProfile);
-      this.fastify.log.debug('Google profile validated successfully');
-
-      // Find or create user in the database using the original Google profile
-      const user = await this.userService.findOrCreateUserByGoogleProfile(googleProfile);
-      this.fastify.log.info({ userId: user.id, role: user.role }, 'User found or created successfully');
-
-      // Generate tokens for the user
-      const tokens = await this.generateTokens(user);
-      this.fastify.log.debug({ userId: user.id }, 'JWT tokens generated successfully');
-      
-      return tokens;
-    } catch (error) {
-      this.fastify.log.error({ 
-        err: error,
-        googleId: googleId?.substring(0, 5) + '...' // Only log part of the ID for privacy
-      }, 'Error processing Google login');
-
-      // If it's already one of our custom errors, rethrow it
-      if (
-        error instanceof ValidationError ||
-        error instanceof NotFoundError ||
-        error instanceof AuthenticationError
-      ) {
-        throw error;
-      }
-
-      // Otherwise wrap in an appropriate custom error
-      if (error instanceof Error) {
-        throw new ExternalServiceError(
-          `Google login processing failed: ${error.message}`,
-          'GOOGLE_AUTH_ERROR',
-        );
-      }
-
-      throw new ExternalServiceError(
-        'An unexpected error occurred during Google login.',
-        'GOOGLE_AUTH_UNKNOWN_ERROR',
-      );
-    }
+  // Inject dependencies (Fastify instance for JWT signing, UserService, SessionService)
+  constructor(private fastify: FastifyInstance) {
+    this.userService = new UserService(fastify);
+    this.sessionService = new SessionService(fastify);
   }
 
   /**
-   * Validates that a Google profile contains all required fields
-   * @param profile - The Google profile to validate
-   * @throws ValidationError if any required fields are missing
+   * Authenticate user with Google profile and generate tokens
+   * @param googleProfile - The Google profile data
+   * @param request - Optional request object for better correlation
+   * @returns JWT tokens and user info
    */
-  private validateGoogleProfile(profile: GoogleUserProfile): void {
-    const requiredFields = ['sub', 'email'];
-    const missingFields = requiredFields.filter(
-      (field) => !profile[field as keyof GoogleUserProfile],
+  async authenticateWithGoogle(
+    googleProfile: GoogleProfile,
+    request?: FastifyRequest,
+  ): Promise<AuthResult> {
+    const logMethod = request ? request.log : this.logger;
+
+    logMethod.info(
+      {
+        hasEmail: !!googleProfile.email,
+        hasId: !!(googleProfile.id || googleProfile.sub),
+        hasName: !!googleProfile.name,
+        ...(request ? {} : { service: 'AuthService' }),
+      },
+      'Authenticating user with Google profile',
     );
 
-    if (missingFields.length > 0) {
-      throw new ValidationError(
-        `Google profile missing required fields: ${missingFields.join(', ')}`,
-        'GOOGLE_PROFILE_INVALID',
+    try {
+      // Find or create user
+      const user: UserDocument = await this.userService.findOrCreateGoogleUser(
+        googleProfile,
+        request,
       );
-    }
 
-    // Ensure the email is verified (Google should ensure this, but double-check)
-    if (profile.email_verified === false) {
-      throw new ValidationError('Google email is not verified', 'GOOGLE_EMAIL_UNVERIFIED');
+      logMethod.debug('Google profile validated successfully');
+
+      logMethod.info(
+        {
+          userId: (user._id as any).toString(),
+          email: user.email,
+          role: user.role,
+          isNewUser: !user.googleId,
+        },
+        'User authentication successful',
+      );
+
+      const userId = (user._id as any).toString();
+
+      // Generate access token (short-lived, stateless)
+      const accessToken = await this.generateAccessToken(userId, request);
+
+      // Create refresh token session in database (long-lived, stateful)
+      const refreshToken = await this.sessionService.createSession(userId, request);
+
+      logMethod.debug(
+        {
+          userId: userId.substring(0, 8) + '...',
+          hasAccessToken: !!accessToken,
+          hasRefreshToken: !!refreshToken,
+        },
+        'Access token and refresh session created successfully',
+      );
+
+      return {
+        user: {
+          id: userId,
+          email: user.email,
+          name: user.name || user.email,
+          role: user.role,
+        },
+        accessToken,
+        refreshToken,
+      };
+    } catch (error) {
+      logMethod.error(
+        {
+          err: error,
+          email: googleProfile.email,
+        },
+        'Google authentication failed',
+      );
+      throw error;
     }
   }
 
   /**
-   * Generates JWT tokens for an authenticated user
-   * @param user - The authenticated user
-   * @returns Access token and refresh token
+   * Generate JWT access token for a user (short-lived)
+   * @param userId - The user ID to generate token for
+   * @param request - Optional request object for better correlation
+   * @returns JWT access token
    */
-  private async generateTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
-    this.fastify.log.debug({ userId: user.id }, 'Generating JWT tokens');
-    
-    // Prepare JWT payload
-    const payload: UserJWTPayload = {
-      id: user.id,
-      email: user.email,
-      role: user.role, // Include the role for role-based access control
-      // Add other claims as needed
-    };
+  async generateAccessToken(userId: string, request?: FastifyRequest): Promise<string> {
+    const logMethod = request ? request.log : this.logger;
 
-    // Generate JWTs with expiry times from config
-    const accessTokenExpiry = config.JWT_ACCESS_TOKEN_EXPIRY;
-    const refreshTokenExpiry = config.JWT_REFRESH_TOKEN_EXPIRY;
-    
-    this.fastify.log.debug({ 
-      userId: user.id, 
-      accessTokenExpiry,
-      refreshTokenExpiry
-    }, 'Signing tokens with configured expiration times');
-
-    const accessToken = await this.fastify.jwt.sign(payload, {
-      expiresIn: accessTokenExpiry,
-    });
-
-    const refreshToken = await this.fastify.jwt.sign(payload, {
-      expiresIn: refreshTokenExpiry,
-    });
-
-    return { accessToken, refreshToken };
-  }
-
-  /**
-   * Refreshes the user's authentication token
-   * @param refreshToken - The refresh token from the cookie
-   * @returns The new access token and refresh token
-   */
-  async refreshToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
-    const fastify = this.fastify;
+    logMethod.debug({ userId: userId.substring(0, 8) + '...' }, 'Generating JWT access token');
 
     try {
-      // Verify the refresh token
-      const decoded = await fastify.jwt.verify(refreshToken);
+      const payload = {
+        userId,
+        type: 'access',
+        // Include user info in token for fast access without DB lookup
+        iat: Math.floor(Date.now() / 1000),
+      };
+      const secret = config.JWT_SECRET;
+      const options: any = { expiresIn: config.JWT_EXPIRES_IN || '1h' };
+      const accessToken = jwt.sign(payload, secret, options) as string;
 
-      if (!decoded || typeof decoded !== 'object') {
-        throw new AuthenticationError('Invalid token format', 'INVALID_TOKEN_FORMAT');
-      }
+      logMethod.debug(
+        {
+          userId: userId.substring(0, 8) + '...',
+          accessTokenLength: accessToken.length,
+          expiresIn: config.JWT_EXPIRES_IN || '1h',
+        },
+        'Access token generated successfully',
+      );
 
-      // Find the user in database using the id from the token payload
-      const user = await this.userService.findUserById((decoded as UserJWTPayload).id);
-      if (!user) {
-        throw new AuthenticationError('User not found', 'USER_NOT_FOUND');
-      }
-
-      // Generate new tokens using the existing method
-      return this.generateTokens(user);
+      return accessToken;
     } catch (error) {
-      fastify.log.error({ err: error }, 'Token refresh failed');
-      throw new AuthenticationError('Invalid refresh token', 'INVALID_REFRESH_TOKEN');
+      logMethod.error(
+        {
+          err: error,
+          userId: userId.substring(0, 8) + '...',
+        },
+        'Failed to generate JWT access token',
+      );
+      throw error;
     }
   }
 
-  // Add other auth methods like logout, refresh token handling, etc.
+  /**
+   * Verify and decode a JWT token
+   * @param token - The JWT token to verify
+   * @param tokenType - The type of token ('access' or 'refresh')
+   * @param request - Optional request object for better correlation
+   * @returns Decoded token payload
+   */
+  async verifyToken(
+    token: string,
+    tokenType: 'access' | 'refresh' = 'access',
+    request?: FastifyRequest,
+  ): Promise<any> {
+    const logMethod = request ? request.log : this.logger;
+
+    try {
+      const secret = tokenType === 'access' ? config.JWT_SECRET : config.JWT_REFRESH_SECRET;
+
+      const decoded = jwt.verify(token, secret) as any;
+
+      if (decoded.type !== tokenType) {
+        throw new Error(`Invalid token type. Expected ${tokenType}, got ${decoded.type}`);
+      }
+
+      logMethod.debug(
+        {
+          userId: decoded.userId?.substring(0, 8) + '...',
+          tokenType,
+          expiresAt: new Date(decoded.exp * 1000).toISOString(),
+        },
+        'Token verified successfully',
+      );
+
+      return decoded;
+    } catch (error) {
+      logMethod.error(
+        {
+          err: error,
+          tokenType,
+          tokenPreview: token.substring(0, 20) + '...',
+        },
+        'Token verification failed',
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Refresh access token using database-stored refresh token
+   * @param refreshToken - The refresh token
+   * @param request - Optional request object for better correlation
+   * @returns New access token
+   */
+  async refreshAccessToken(refreshToken: string, request?: FastifyRequest): Promise<string> {
+    const logMethod = request ? request.log : this.logger;
+
+    logMethod.debug('Attempting to refresh access token');
+
+    try {
+      // Validate refresh token against database
+      const userId = await this.sessionService.validateRefreshToken(refreshToken, request);
+
+      // Generate new access token
+      const newAccessToken = await this.generateAccessToken(userId, request);
+
+      logMethod.info(
+        {
+          userId: userId.substring(0, 8) + '...',
+          newTokenLength: newAccessToken.length,
+        },
+        'Access token refreshed successfully',
+      );
+
+      return newAccessToken;
+    } catch (error) {
+      logMethod.error(
+        {
+          err: error,
+          refreshTokenPreview: refreshToken.substring(0, 20) + '...',
+        },
+        'Token refresh failed',
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get user information from a valid access token
+   * @param accessToken - The access token
+   * @param request - Optional request object for better correlation
+   * @returns User information
+   */
+  async getUserFromToken(
+    accessToken: string,
+    request?: FastifyRequest,
+  ): Promise<{
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+  }> {
+    const logMethod = request ? request.log : this.logger;
+
+    try {
+      // Verify token
+      const decoded = await this.verifyToken(accessToken, 'access', request);
+
+      // Get user details
+      const user: UserDocument | null = await this.userService.findById(decoded.userId, request);
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      logMethod.debug(
+        {
+          userId: (user._id as any).toString(),
+          email: user.email,
+          role: user.role,
+        },
+        'User retrieved from token successfully',
+      );
+
+      return {
+        id: (user._id as any).toString(),
+        email: user.email,
+        name: user.name || user.email,
+        role: user.role,
+      };
+    } catch (error) {
+      logMethod.error(
+        {
+          err: error,
+          tokenPreview: accessToken.substring(0, 20) + '...',
+        },
+        'Failed to get user from token',
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Logout user - revoke refresh token from database
+   * @param refreshToken - The refresh token to revoke
+   * @param request - Optional request object for better correlation
+   */
+  async logout(refreshToken: string, request?: FastifyRequest): Promise<void> {
+    const logMethod = request ? request.log : this.logger;
+
+    try {
+      // Revoke the refresh token in database
+      await this.sessionService.revokeRefreshToken(refreshToken, request);
+
+      logMethod.info('User logged out - refresh token revoked');
+    } catch (error) {
+      logMethod.error(
+        {
+          err: error,
+          refreshTokenPreview: refreshToken.substring(0, 10) + '...',
+        },
+        'Logout failed',
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Logout user from all devices - revoke all refresh tokens
+   * @param userId - The user ID logging out from all devices
+   * @param request - Optional request object for better correlation
+   */
+  async logoutAllDevices(userId: string, request?: FastifyRequest): Promise<void> {
+    const logMethod = request ? request.log : this.logger;
+
+    try {
+      // Revoke all refresh tokens for this user
+      await this.sessionService.revokeAllUserSessions(userId, request);
+
+      logMethod.info(
+        {
+          userId: userId.substring(0, 8) + '...',
+        },
+        'User logged out from all devices',
+      );
+    } catch (error) {
+      logMethod.error(
+        {
+          err: error,
+          userId: userId.substring(0, 8) + '...',
+        },
+        'Logout from all devices failed',
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get all active sessions for a user
+   * @param userId - The user ID
+   * @param request - Optional request object for better correlation
+   * @returns Array of active sessions
+   */
+  async getUserSessions(userId: string, request?: FastifyRequest): Promise<any[]> {
+    return await this.sessionService.getUserSessions(userId, request);
+  }
+
+  /**
+   * Process Google login - wrapper method for backwards compatibility
+   * @param googleProfile - The Google profile data
+   * @param request - Optional request object for better correlation
+   * @returns Access and refresh tokens
+   */
+  async processGoogleLogin(
+    googleProfile: GoogleProfile,
+    request?: FastifyRequest,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    const result = await this.authenticateWithGoogle(googleProfile, request);
+    return {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    };
+  }
 }

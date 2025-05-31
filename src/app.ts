@@ -7,6 +7,8 @@ import { logger } from './utils/logger'; // Import centralized logger
 import { logSystemInfo } from './utils/logglyHelper'; // Import Loggly helpers
 import { registerRequestContextMiddleware } from './utils/requestContextMiddleware'; // Request context middleware
 import { registerLogglyHealthRoutes } from './utils/logglyHealth'; // Loggly health check
+import { getOrCreateSessionId } from './utils/sessionManager'; // Session management
+import { createCorrelationContext } from './utils/correlationContext'; // Correlation context
 
 // Import plugins
 import jwtPlugin from './plugins/jwt';
@@ -23,13 +25,37 @@ import hlsRoutes from './modules/course/hls.route';
 export function buildApp(): FastifyInstance {
   // Use the centralized logger instance that supports Loggly
   const fastify = Fastify({
-    logger,
+    logger: false, // Disable Fastify's built-in logger
     // Generate request IDs for better tracing in logs
-    genReqId: () => nanoid(10)
+    genReqId: () => nanoid(10),
   });
 
-  // Register request context middleware early to ensure all requests are properly traced
+  // Set our custom logger as the Fastify logger
+  fastify.log = logger;
+
+  // Register centralized correlation context middleware first
+  fastify.addHook('onRequest', async (request, reply) => {
+    // Generate a unique request ID if not already present
+    if (!request.id) {
+      request.id = nanoid(10);
+    }
+
+    // Ensure session ID exists for all requests
+    getOrCreateSessionId(request, reply);
+
+    // Create correlation context for this request
+    const correlationContext = createCorrelationContext(request);
+    request.correlationContext = correlationContext;
+  });
+
+  // Register request context middleware for additional logging enhancements
   registerRequestContextMiddleware(fastify);
+
+  // Enhanced request logging with correlation context
+  fastify.addHook('onRequest', async (request, _reply) => {
+    // This will automatically include correlation context due to the middleware above
+    request.log.info('Incoming request received');
+  });
 
   // --- Register Plugins ---
   // Register MongoDB connection first as other services/routes might depend on it
@@ -111,15 +137,17 @@ export function buildApp(): FastifyInstance {
   // fastify.register(userRoutes, { prefix: '/api/users' });
 
   // --- Basic Root Route ---
-  fastify.get('/', async (_request, _reply) => {
+  fastify.get('/', async (request, _reply) => {
+    request.log.info('Root endpoint accessed');
     return { message: 'Authentication Service Running' };
   });
-  
+
   // Register health check routes
-  fastify.get('/api/health', async (_request, reply) => {
+  fastify.get('/api/health', async (request, reply) => {
+    request.log.info('Health check endpoint accessed');
     return reply.send({ status: 'ok', timestamp: new Date().toISOString() });
   });
-  
+
   // Register Loggly-specific health check
   registerLogglyHealthRoutes(fastify);
 
@@ -130,26 +158,20 @@ export function buildApp(): FastifyInstance {
 
     // Log the error with appropriate level based on status code
     if (appError.statusCode >= 500) {
-      fastify.log.error(
+      request.log.error(
         {
           err: error,
-          request: {
-            url: request.url,
-            method: request.method,
-            id: request.id,
-          },
+          errorType: error.constructor.name,
+          statusCode: appError.statusCode,
         },
         'Server error occurred',
       );
     } else {
-      fastify.log.warn(
+      request.log.warn(
         {
           err: error,
-          request: {
-            url: request.url,
-            method: request.method,
-            id: request.id,
-          },
+          errorType: error.constructor.name,
+          statusCode: appError.statusCode,
         },
         'Client error occurred',
       );
@@ -172,7 +194,7 @@ export function buildApp(): FastifyInstance {
   });
 
   fastify.log.info('Fastify server initialized');
-  
+
   // Log system information with Loggly integration if configured
   logSystemInfo(fastify);
 

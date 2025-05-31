@@ -51,11 +51,18 @@ export class AuthController {
       const { accessToken: jwtToken, refreshToken } =
         await this.authService.processGoogleLogin(userProfile);
 
-      // 4. Set the JWT token in an HTTP-only cookie using our consistent configuration
+      // 4. Set ONLY the access token in an HTTP-only cookie
+      // Refresh token is stored in database, not sent to client
       reply.setCookie('auth_token', jwtToken, getCookieConfig());
 
-      // Also set the refresh token in a separate cookie
-      reply.setCookie('refresh_token', refreshToken, getCookieConfig());
+      fastify.log.info(
+        {
+          hasAccessToken: !!jwtToken,
+          refreshTokenStored: !!refreshToken, // Just log that it exists, don't expose it
+          accessTokenExpiry: '1h',
+        },
+        'Authentication tokens created - access token in cookie, refresh token in database',
+      );
 
       // Redirect user back to the frontend without including the token in the URL
       const redirectUrl = new URL(config.FRONTEND_URL);
@@ -85,42 +92,106 @@ export class AuthController {
 
   // Logout handler
   async logoutHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-    reply.clearCookie('auth_token', getCookieConfig());
-    reply.clearCookie('refresh_token', getCookieConfig());
-    reply.send({ message: 'Logged out successfully' });
+    try {
+      // Try to get refresh token from request body or headers
+      const body = request.body as any;
+      const refreshToken = body?.refreshToken || request.headers['x-refresh-token'];
+
+      if (refreshToken) {
+        // Revoke the refresh token from database
+        await this.authService.logout(refreshToken, request);
+      }
+
+      // Clear the access token cookie (no more refresh token cookie)
+      reply.clearCookie('auth_token', getCookieConfig());
+
+      reply.send({ message: 'Logged out successfully' });
+    } catch (error) {
+      request.log.error({ err: error }, 'Logout failed');
+      // Even if logout fails, clear the cookie
+      reply.clearCookie('auth_token', getCookieConfig());
+      reply.send({ message: 'Logged out successfully' });
+    }
+  }
+
+  // Logout from all devices handler
+  async logoutAllDevicesHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    try {
+      const user = request.user;
+      if (!user?.id) {
+        reply.status(401).send({ error: 'Not authenticated' });
+        return;
+      }
+
+      // Revoke all refresh tokens for this user
+      await this.authService.logoutAllDevices(user.id, request);
+
+      // Clear the access token cookie
+      reply.clearCookie('auth_token', getCookieConfig());
+
+      reply.send({ message: 'Logged out from all devices successfully' });
+    } catch (error) {
+      request.log.error({ err: error }, 'Logout from all devices failed');
+      reply.status(500).send({ error: 'Logout from all devices failed' });
+    }
+  }
+
+  // Get active sessions handler
+  async getActiveSessionsHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    try {
+      const user = request.user;
+      if (!user?.id) {
+        reply.status(401).send({ error: 'Not authenticated' });
+        return;
+      }
+
+      // Get all active sessions for the user
+      const sessions = await this.authService.getUserSessions(user.id, request);
+
+      reply.send({
+        sessions,
+        currentSessionId: request.sessionId, // Include current session ID
+      });
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to get active sessions');
+      reply.status(500).send({ error: 'Failed to retrieve sessions' });
+    }
   }
 
   // Refresh token handler
   async refreshTokenHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
     const fastify = request.server;
     try {
-      // Extract refresh token from cookie
-      const refreshToken = request.cookies.refresh_token;
+      // Get refresh token from request body or headers (NOT from cookies)
+      const body = request.body as any;
+      const refreshToken = body?.refreshToken || request.headers['x-refresh-token'];
+
       if (!refreshToken) {
         return reply.status(401).send({
           statusCode: 401,
           error: 'Unauthorized',
-          message: 'Refresh token is missing.',
+          message: 'Refresh token is required.',
         });
       }
 
-      // Verify refresh token and get new tokens
-      const { accessToken, refreshToken: newRefreshToken } =
-        await this.authService.refreshToken(refreshToken);
+      // Generate new access token using database-stored refresh token
+      const newAccessToken = await this.authService.refreshAccessToken(refreshToken, request);
 
-      // Set the new JWT token in HTTP-only cookie
-      reply.setCookie('auth_token', accessToken, getCookieConfig());
+      // Set ONLY the new access token in HTTP-only cookie
+      // Refresh token remains in database unchanged
+      reply.setCookie('auth_token', newAccessToken, getCookieConfig());
 
-      // Set the new refresh token in HTTP-only cookie
-      reply.setCookie('refresh_token', newRefreshToken, getCookieConfig());
-
-      reply.send({ message: 'Token refreshed successfully' });
+      reply.send({
+        message: 'Token refreshed successfully',
+        // Note: We don't return the access token in response for security
+        // It's automatically stored in HTTP-only cookie
+      });
     } catch (error) {
       fastify.log.error({ err: error }, 'Token refresh error');
       reply.status(401).send({
         statusCode: 401,
         error: 'Unauthorized',
-        message: 'Invalid or expired refresh token.',
+        message: 'Invalid or expired refresh token - please login again.',
       });
     }
   }

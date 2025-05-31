@@ -1,21 +1,22 @@
 // src/modules/auth/auth.route.ts
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
+import { UserDocument } from '../user/user.model';
 import { NotFoundError } from '../../utils/errors';
 import { authenticate } from '../../utils/authMiddleware';
 
 export default async function authRoutes(fastify: FastifyInstance): Promise<void> {
   // Create services
   const userService = new UserService(fastify);
-  const authService = new AuthService(fastify, userService);
+  const authService = new AuthService(fastify);
 
   // Instantiate controller with the service
   const authController = new AuthController(authService);
 
   // Create a preHandler wrapper for authentication
-  const authPreHandler = async (request: any, reply: any) => {
+  const authPreHandler = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     await authenticate(request, reply);
   };
 
@@ -40,18 +41,15 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
     },
     async (request, _reply) => {
       // Access authenticated user data via request.user (set by auth middleware)
-      console.log('userData', {
-        request,
-      });
       const userData = request.user;
       // Fetch full user profile if needed (avoid including sensitive data in JWT)
-      const fullUser = await userService.findUserById(userData.id);
+      const fullUser: UserDocument | null = await userService.findById(userData.id);
       if (!fullUser) {
         throw new NotFoundError('User not found', 'USER_NOT_FOUND');
       }
       // Return non-sensitive user info
       return {
-        id: fullUser.id,
+        id: (fullUser._id as any).toString(),
         email: fullUser.email,
         name: fullUser.name,
         role: fullUser.role,
@@ -78,6 +76,20 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
 
   // Logout route to clear the auth_token cookie
   fastify.post('/logout', authController.logoutHandler.bind(authController));
+
+  // Logout from all devices route (requires authentication)
+  fastify.post(
+    '/logout-all',
+    { preHandler: authPreHandler },
+    authController.logoutAllDevicesHandler.bind(authController),
+  );
+
+  // Get active sessions route (requires authentication)
+  fastify.get(
+    '/sessions',
+    { preHandler: authPreHandler },
+    authController.getActiveSessionsHandler.bind(authController),
+  );
 
   fastify.log.info('Auth routes registered');
 }

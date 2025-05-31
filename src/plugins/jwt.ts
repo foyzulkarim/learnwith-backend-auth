@@ -18,13 +18,14 @@ export interface UserJWTPayload {
   [key: string]: unknown; // Index signature for @fastify/jwt compatibility
 }
 
-// Extend FastifyRequest interface to include the user payload
+// Extend FastifyRequest interface to include the user payload and session ID
 declare module 'fastify' {
   interface FastifyRequest {
     user: UserJWTPayload;
     jwt: {
       user: UserJWTPayload;
     };
+    sessionId?: string; // Database session ID for correlation tracking
   }
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -42,7 +43,7 @@ export default fp(async function jwtPlugin(fastify: FastifyInstance) {
   fastify.register(fastifyJwt, {
     secret: config.JWT_SECRET,
     sign: {
-      expiresIn: config.JWT_ACCESS_TOKEN_EXPIRY, // Access token expiry from config
+      expiresIn: config.JWT_EXPIRES_IN, // Access token expiry from config
       // Consider adding 'iss' (issuer) and 'aud' (audience) for security
     },
     cookie: {

@@ -9,7 +9,7 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
   FRONTEND_URL: z.string().url().default('http://localhost:3030'), // URL of your frontend app
   ALLOWED_ORIGINS: z.string().optional().default('http://localhost:3030'), // Comma-separated list of allowed origins for CORS
-  
+
   // Loggly Integration
   LOGGLY_TOKEN: z.string().optional(), // Loggly Customer Token
   LOGGLY_SUBDOMAIN: z.string().optional(), // Loggly Subdomain
@@ -22,8 +22,9 @@ export const envSchema = z.object({
   GOOGLE_CALLBACK_URL: z.string().url(),
 
   // JWT Configuration
-  JWT_ACCESS_TOKEN_EXPIRY: z.string().default('1h'),
-  JWT_REFRESH_TOKEN_EXPIRY: z.string().default('7d'),
+  JWT_EXPIRES_IN: z.string().default('1h'),
+  JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters long'),
+  JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
 
   // Cookie Configuration
   COOKIE_SAME_SITE: z.enum(['strict', 'lax', 'none']).default('lax'),
@@ -49,8 +50,9 @@ GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
 GOOGLE_CLIENT_SECRET="YOUR_GOOGLE_CLIENT_SECRET"
 GOOGLE_CALLBACK_URL="http://localhost:3000/api/auth/google/callback" # Adjust for deployment
 
-JWT_ACCESS_TOKEN_EXPIRY="1h"
-JWT_REFRESH_TOKEN_EXPIRY="7d"
+JWT_EXPIRES_IN="1h"
+JWT_REFRESH_SECRET="your_super_secret_jwt_refresh_key_at_least_32_chars_long"
+JWT_REFRESH_EXPIRES_IN="7d"
 COOKIE_SAME_SITE="lax"
 
 # Loggly integration (optional, recommended for production)
