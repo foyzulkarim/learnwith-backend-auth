@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { logger } from '../utils/logger';
 
 // Define schema for video streaming config
 const videoStreamingConfigSchema = z.object({
@@ -31,15 +30,15 @@ export const videoStreamingConfig = (): VideoStreamingConfig => {
   } catch (error) {
     if (error instanceof z.ZodError) {
       const missingVars = error.errors.map((e) => e.path.join('.'));
-      logger.error(
+      console.error(
         `Video streaming configuration is invalid or incomplete. Missing/invalid variables: ${missingVars.join(', ')}`,
       );
 
       // In development, provide more detailed error information
       if (process.env.NODE_ENV !== 'production') {
-        logger.error('Validation errors:', error.errors);
+        console.error('Validation errors:', error.errors);
 
-        logger.info(`
+        console.info(`
 === VIDEO STREAMING CONFIGURATION GUIDE ===
 To enable video streaming from private storage, please set the following environment variables:
 
@@ -54,7 +53,7 @@ You can add these to your .env file or configure them in your deployment environ
         `);
       }
     } else {
-      logger.error('Unexpected error validating video streaming config:', error);
+      console.error('Unexpected error validating video streaming config:', error);
     }
 
     // Return a partially valid config with defaults to avoid crashing the app

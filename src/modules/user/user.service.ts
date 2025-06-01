@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { User } from './types';
 import { getUserModel, UserDocument } from './user.model';
 import { ValidationError, DatabaseError } from '../../utils/errors';
+import { createLogger, Logger } from '../../utils/logger';
 
 // Define the structure of the Google profile data we expect
 // This matches the OpenID Connect format that Google returns
@@ -25,9 +26,11 @@ export interface GoogleUserProfile {
 
 export class UserService {
   private userModel;
+  private logger: Logger;
 
   constructor(private fastify: FastifyInstance) {
     this.userModel = getUserModel();
+    this.logger = createLogger(fastify);
   }
 
   /**
@@ -37,10 +40,26 @@ export class UserService {
    * @returns The found or created User object.
    */
   async findOrCreateUserByGoogleProfile(profile: GoogleUserProfile): Promise<User> {
+    const logContext = this.logger.startOperation('UserService.findOrCreateUserByGoogleProfile', {
+      googleId: profile.sub || profile.id,
+      email: profile.email,
+      hasName: !!(profile.name || profile.displayName),
+      provider: profile.provider,
+    });
+
     try {
       // Get the Google ID (sub is the OpenID Connect standard)
       const googleId = profile.sub || profile.id;
       if (!googleId) {
+        this.logger.warn(
+          {
+            operation: 'UserService.findOrCreateUserByGoogleProfile',
+            step: 'validation_failed',
+            providedFields: Object.keys(profile),
+          },
+          'Google profile ID validation failed',
+        );
+
         throw new ValidationError('Google profile ID is missing.', 'GOOGLE_PROFILE_INVALID');
       }
 
@@ -50,6 +69,17 @@ export class UserService {
         (profile.emails && profile.emails.length > 0 ? profile.emails[0].value : undefined);
 
       if (!email) {
+        this.logger.warn(
+          {
+            operation: 'UserService.findOrCreateUserByGoogleProfile',
+            step: 'validation_failed',
+            googleId,
+            hasDirectEmail: !!profile.email,
+            hasEmailsArray: !!(profile.emails && profile.emails.length > 0),
+          },
+          'Google profile email validation failed',
+        );
+
         throw new ValidationError('Google profile email is missing.', 'GOOGLE_PROFILE_INVALID');
       }
 
@@ -60,32 +90,140 @@ export class UserService {
         `${profile.given_name || ''} ${profile.family_name || ''}`.trim() ||
         'User';
 
+      this.logger.info(
+        {
+          operation: 'UserService.findOrCreateUserByGoogleProfile',
+          step: 'profile_processed',
+          googleId,
+          email,
+          name,
+        },
+        'Google profile processed successfully',
+      );
+
       // 1. Try to find user by Google ID
+      this.logger.info(
+        {
+          operation: 'UserService.findOrCreateUserByGoogleProfile',
+          step: 'lookup_by_google_id',
+          googleId,
+        },
+        'Looking up user by Google ID',
+      );
+
       let user = await this.userModel.findOne({ googleId });
 
       if (user) {
+        this.logger.info(
+          {
+            operation: 'UserService.findOrCreateUserByGoogleProfile',
+            step: 'found_by_google_id',
+            userId: user._id.toString(),
+            email: user.email,
+            googleId,
+          },
+          'User found by Google ID',
+        );
+
         // Optional: Update user's name or other details if they've changed in Google
         if (user.name !== name) {
+          this.logger.info(
+            {
+              operation: 'UserService.findOrCreateUserByGoogleProfile',
+              step: 'updating_name',
+              userId: user._id.toString(),
+              oldName: user.name,
+              newName: name,
+            },
+            'Updating user name from Google profile',
+          );
+
           user.name = name;
           await user.save();
         }
-        return this.convertToUser(user);
+
+        const result = this.convertToUser(user);
+
+        this.logger.endOperation(logContext, `User found by Google ID: ${result.email}`, {
+          userId: result.id,
+          email: result.email,
+          googleId,
+          action: 'found_existing',
+        });
+
+        return result;
       }
 
       // 2. If not found by Google ID, try to find by email
       // This handles cases where a user might have previously signed up via email
+      this.logger.info(
+        {
+          operation: 'UserService.findOrCreateUserByGoogleProfile',
+          step: 'lookup_by_email',
+          email,
+        },
+        'User not found by Google ID, looking up by email',
+      );
+
       user = await this.userModel.findOne({ email });
 
       if (user) {
+        this.logger.info(
+          {
+            operation: 'UserService.findOrCreateUserByGoogleProfile',
+            step: 'found_by_email_linking_google',
+            userId: user._id.toString(),
+            email: user.email,
+            googleId,
+          },
+          'User found by email, linking Google account',
+        );
+
         // User exists with this email but hasn't linked Google yet.
         // Link the Google ID to the existing account.
         user.googleId = googleId;
         if (!user.name) user.name = name;
         await user.save();
-        return this.convertToUser(user);
+
+        const result = this.convertToUser(user);
+
+        this.logger.endOperation(
+          logContext,
+          `User found by email and linked to Google: ${result.email}`,
+          {
+            userId: result.id,
+            email: result.email,
+            googleId,
+            action: 'linked_google',
+          },
+        );
+
+        // Log business metrics
+        this.logger.logMetric(
+          'google_account_linked',
+          {
+            userId: result.id,
+            email: result.email,
+            googleId,
+          },
+          'Google account linked to existing user',
+        );
+
+        return result;
       }
 
       // 3. If not found by email either, create a new user
+      this.logger.info(
+        {
+          operation: 'UserService.findOrCreateUserByGoogleProfile',
+          step: 'creating_new_user',
+          email,
+          googleId,
+          name,
+        },
+        'User not found by email or Google ID, creating new user',
+      );
+
       user = await this.userModel.create({
         email,
         googleId,
@@ -94,9 +232,39 @@ export class UserService {
         // Add other default fields if necessary
       });
 
-      return this.convertToUser(user);
+      const result = this.convertToUser(user);
+
+      this.logger.endOperation(logContext, `New user created: ${result.email}`, {
+        userId: result.id,
+        email: result.email,
+        googleId,
+        role: result.role,
+        action: 'created_new',
+      });
+
+      // Log business metrics
+      this.logger.logMetric(
+        'user_created_via_google',
+        {
+          userId: result.id,
+          email: result.email,
+          googleId,
+          role: result.role,
+        },
+        'New user created via Google OAuth',
+      );
+
+      return result;
     } catch (error) {
-      this.fastify.log.error({ err: error }, 'Error finding or creating user by Google profile');
+      this.logger.errorOperation(
+        logContext,
+        error,
+        'Error finding or creating user by Google profile',
+        {
+          googleId: profile.sub || profile.id,
+          email: profile.email,
+        },
+      );
 
       // If it's already one of our custom errors, rethrow it
       if (error instanceof ValidationError) {
@@ -124,14 +292,50 @@ export class UserService {
    * @returns The user or null if not found
    */
   async findUserById(id: string): Promise<User | null> {
+    const logContext = this.logger.startOperation('UserService.findUserById', {
+      userId: id,
+    });
+
     try {
+      this.logger.info(
+        {
+          operation: 'UserService.findUserById',
+          step: 'database_lookup',
+          userId: id,
+        },
+        'Looking up user by ID in database',
+      );
+
       const user = await this.userModel.findById(id);
+
       if (!user) {
+        this.logger.warn(
+          {
+            operation: 'UserService.findUserById',
+            userId: id,
+            found: false,
+          },
+          `User not found: ${id}`,
+        );
+
+        this.logger.endOperation(logContext, `User not found: ${id}`, { userId: id, found: false });
+
         return null;
       }
-      return this.convertToUser(user);
+
+      const result = this.convertToUser(user);
+
+      this.logger.endOperation(logContext, `User found: ${result.email}`, {
+        userId: result.id,
+        email: result.email,
+        role: result.role,
+        found: true,
+      });
+
+      return result;
     } catch (error) {
-      this.fastify.log.error({ err: error, userId: id }, 'Error finding user by ID');
+      this.logger.errorOperation(logContext, error, 'Error finding user by ID', { userId: id });
+
       throw new DatabaseError(
         `Error finding user: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'USER_LOOKUP_ERROR',

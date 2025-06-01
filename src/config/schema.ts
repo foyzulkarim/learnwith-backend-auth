@@ -24,6 +24,15 @@ export const envSchema = z.object({
   // Cookie Configuration
   COOKIE_SAME_SITE: z.enum(['strict', 'lax', 'none']).default('lax'),
 
+  // Logging Configuration
+  LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+  ENABLE_FILE_LOGGING: z.coerce.boolean().default(false),
+  ENABLE_LOGGLY_LOGGING: z.coerce.boolean().default(false),
+  LOG_FILE_PATH: z.string().optional(), // Optional custom log file path
+  LOGGLY_TOKEN: z.string().optional(), // Loggly customer token
+  LOGGLY_SUBDOMAIN: z.string().optional(), // Loggly subdomain
+  LOGGLY_TAGS: z.string().optional(), // Comma-separated tags for Loggly
+
   // Cloudflare R2 Configuration for Video Storage
   CLOUDFLARE_ACCOUNT_ID: z.string().min(1, 'CLOUDFLARE_ACCOUNT_ID is required'),
   R2_ACCESS_KEY_ID: z.string().min(1, 'R2_ACCESS_KEY_ID is required'),
@@ -48,4 +57,13 @@ GOOGLE_CALLBACK_URL="http://localhost:3000/api/auth/google/callback" # Adjust fo
 JWT_ACCESS_TOKEN_EXPIRY="1h"
 JWT_REFRESH_TOKEN_EXPIRY="7d"
 COOKIE_SAME_SITE="lax"
+
+# Logging Configuration
+LOG_LEVEL="info"
+ENABLE_FILE_LOGGING=true
+ENABLE_LOGGLY_LOGGING=false
+LOG_FILE_PATH="./logs/app.log" # Optional: defaults to ./logs/app.log if not specified
+LOGGLY_TOKEN="your-loggly-customer-token"
+LOGGLY_SUBDOMAIN="your-subdomain"
+LOGGLY_TAGS="nodejs,fastify,backend"
 */

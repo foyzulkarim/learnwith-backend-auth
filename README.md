@@ -55,6 +55,15 @@ This is the authentication service for the LearnWith platform, handling user aut
    GOOGLE_CLIENT_SECRET=your_google_client_secret
    GOOGLE_CALLBACK_URL=http://localhost:3000/api/auth/google/callback
 
+   # Logging Configuration
+   LOG_LEVEL=info                    # Options: trace, debug, info, warn, error, fatal
+   ENABLE_FILE_LOGGING=false         # Set to true to enable file-based logging
+   ENABLE_LOGGLY_LOGGING=false       # Set to true to enable Loggly cloud logging
+   LOG_FILE_PATH=./logs/app.log      # Optional: custom log file path
+   LOGGLY_TOKEN=your-token           # Required if ENABLE_LOGGLY_LOGGING=true
+   LOGGLY_SUBDOMAIN=your-subdomain   # Optional: Loggly subdomain
+   LOGGLY_TAGS=nodejs,fastify,backend # Optional: comma-separated tags
+
    # Cloudflare R2 Storage for video streaming
    CLOUDFLARE_ACCOUNT_ID=your-cloudflare-account-id
    R2_ACCESS_KEY_ID=your-r2-access-key-id
@@ -95,6 +104,74 @@ This is the authentication service for the LearnWith platform, handling user aut
 
 - `GET /api/auth/me`: Get current authenticated user profile
 - `GET /api/auth/protected`: Test route for authenticated users
+
+## Logging System
+
+This application features a comprehensive, configurable logging system with multiple transport options that can be independently enabled/disabled based on your deployment needs.
+
+### Logging Features
+
+- **Structured JSON logging** with contextual information
+- **Performance monitoring** with execution timing
+- **Request tracing** with unique request IDs
+- **Multiple transport support** (console, file, cloud)
+- **Environment-aware configuration** (pretty logs in dev, JSON in prod)
+- **Business metrics tracking** for audit trails
+
+### Configuration Options
+
+Configure logging behavior using these environment variables:
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `LOG_LEVEL` | string | `info` | Log level: trace, debug, info, warn, error, fatal |
+| `ENABLE_FILE_LOGGING` | boolean | `false` | Enable/disable file-based logging |
+| `ENABLE_LOGGLY_LOGGING` | boolean | `false` | Enable/disable Loggly cloud logging |
+| `LOG_FILE_PATH` | string | `./logs/app.log` | Custom path for log files (optional) |
+| `LOGGLY_TOKEN` | string | - | Loggly customer token (required if Loggly enabled) |
+| `LOGGLY_SUBDOMAIN` | string | - | Loggly subdomain (optional) |
+| `LOGGLY_TAGS` | string | `nodejs,fastify,backend` | Comma-separated tags for Loggly |
+
+### Logging Modes
+
+#### Development Mode
+- **Console**: Pretty-printed colored logs with timestamps
+- **File**: Optional JSON logs to specified file
+- **Loggly**: Optional cloud logging for testing
+
+#### Production Mode
+- **Console**: Structured JSON logs (for container log aggregation)
+- **File**: Optional JSON logs to specified file
+- **Loggly**: Optional cloud logging for monitoring
+
+### Common Logging Configurations
+
+#### Local Development with File Logging
+```bash
+LOG_LEVEL=debug
+ENABLE_FILE_LOGGING=true
+LOG_FILE_PATH=./logs/dev.log
+```
+
+#### Production with Loggly Monitoring
+```bash
+LOG_LEVEL=warn
+ENABLE_FILE_LOGGING=false
+ENABLE_LOGGLY_LOGGING=true
+LOGGLY_TOKEN=your-production-token
+LOGGLY_SUBDOMAIN=your-company
+```
+
+#### Production with Both File and Cloud Logging
+```bash
+LOG_LEVEL=info
+ENABLE_FILE_LOGGING=true
+ENABLE_LOGGLY_LOGGING=true
+LOG_FILE_PATH=/var/log/app/production.log
+LOGGLY_TOKEN=your-production-token
+```
+
+For detailed logging configuration examples, see [LOGGING.md](./LOGGING.md).
 
 ## Running in Production
 
@@ -165,6 +242,14 @@ SIGNED_URL_EXPIRATION=3600
 
 # Video Streaming API Configuration
 API_BASE_URL=https://your-digital-ocean-app-url.com
+
+# Logging Configuration (Production)
+LOG_LEVEL=warn
+ENABLE_FILE_LOGGING=false
+ENABLE_LOGGLY_LOGGING=true
+LOGGLY_TOKEN=your-production-loggly-token
+LOGGLY_SUBDOMAIN=your-company-subdomain
+LOGGLY_TAGS=nodejs,fastify,production,backend
 ```
 
 #### GitHub CI/CD Deployment

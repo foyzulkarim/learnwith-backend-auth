@@ -36,7 +36,14 @@ const HlsRoute: FastifyPluginAsync = async (fastify) => {
       const pathPrefix = masterUrl.split('/').slice(0, -1).join('/');
       // append quality to the path prefix
       const playlistKey = `${pathPrefix}/${quality}/playlist.m3u8`;
-      console.log('playlistKey', playlistKey);
+      fastify.log.debug(
+        {
+          operation: 'hls_playlist_fetch',
+          lessonId,
+          quality,
+        },
+        'Fetching playlist from R2',
+      );
       // using aws sdk get the playlist content
       const s3 = new S3Client({
         region: 'auto',
@@ -52,11 +59,20 @@ const HlsRoute: FastifyPluginAsync = async (fastify) => {
       });
       const response = await s3.send(command);
       const body = await response.Body?.transformToString();
-      console.log('body', body);
 
       if (!body) {
         throw new Error('Empty response body from R2');
       }
+
+      fastify.log.debug(
+        {
+          operation: 'hls_playlist_processing',
+          lessonId,
+          quality,
+          lineCount: body.split('\n').length,
+        },
+        'Processing playlist content',
+      );
 
       // Create an array of promises first, then await all of them
       const linePromises = body.split('\n').map(async (line) => {
@@ -70,7 +86,16 @@ const HlsRoute: FastifyPluginAsync = async (fastify) => {
 
       // Wait for all promises to resolve
       const resolvedLines = await Promise.all(linePromises);
-      console.log('resolvedLines', resolvedLines);
+
+      fastify.log.debug(
+        {
+          operation: 'hls_playlist_complete',
+          lessonId,
+          quality,
+          processedLines: resolvedLines.length,
+        },
+        'Playlist processing completed',
+      );
 
       // Join the resolved lines
       const modifiedContent = resolvedLines.join('\n');
@@ -78,7 +103,15 @@ const HlsRoute: FastifyPluginAsync = async (fastify) => {
       reply.header('Content-Type', 'application/x-mpegURL');
       reply.send(modifiedContent);
     } catch (error) {
-      console.error(error);
+      fastify.log.error(
+        {
+          operation: 'hls_playlist_error',
+          lessonId,
+          quality,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        'Error fetching playlist',
+      );
       reply.status(500).send({ error: 'Internal Server Error' });
     }
   });
