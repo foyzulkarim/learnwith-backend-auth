@@ -40,9 +40,6 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
     },
     async (request, _reply) => {
       // Access authenticated user data via request.user (set by auth middleware)
-      console.log('userData', {
-        request,
-      });
       const userData = request.user;
       // Fetch full user profile if needed (avoid including sensitive data in JWT)
       const fullUser = await userService.findUserById(userData.id);

@@ -45,7 +45,13 @@ export class AuthController {
       }
 
       const userProfile = await userInfoResponse.json();
-      fastify.log.info({ googleProfile: userProfile }, 'Fetched Google user profile.');
+      fastify.log.info(
+        {
+          userId: userProfile.sub,
+          email: userProfile.email,
+        },
+        'Fetched Google user profile.',
+      );
 
       // 3. Process login (find/create user, generate JWT) using the AuthService
       const { accessToken: jwtToken, refreshToken } =
