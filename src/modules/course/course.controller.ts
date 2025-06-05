@@ -13,6 +13,7 @@ import {
 } from './types';
 import { NotFoundError, ValidationError } from '../../utils/errors';
 import { asyncHandler } from '../../utils/middleware';
+import { EnrollmentHelpers } from '../enrollment/enrollment.model';
 
 export class CourseController {
   constructor(private courseService: CourseService) {}
@@ -91,7 +92,7 @@ export class CourseController {
 
   // Get course by ID
   getCourseByIdHandler = asyncHandler(
-    async (request: FastifyRequest, _reply: FastifyReply): Promise<Course> => {
+    async (request: FastifyRequest, _reply: FastifyReply): Promise<Course | any> => {
       const startTime = Date.now();
       const { courseId } = request.params as { courseId: string };
 
@@ -135,6 +136,47 @@ export class CourseController {
           },
           `Successfully retrieved course: ${course.title} in ${duration}ms`,
         );
+
+        // Check if user is authenticated and get enrollment status
+        const userId = (request as any).user?.id;
+        if (userId) {
+          try {
+            const isEnrolled = await EnrollmentHelpers.isUserEnrolled(userId, courseId);
+
+            if (isEnrolled) {
+              const enrollmentDetails = await EnrollmentHelpers.getEnrollmentDetails(
+                userId,
+                courseId,
+              );
+
+              // Add enrollment status to course response
+              return {
+                ...course,
+                isEnrolled: true,
+                enrollmentDetails: enrollmentDetails || null,
+              };
+            }
+
+            // User is not enrolled
+            return {
+              ...course,
+              isEnrolled: false,
+              enrollmentDetails: null,
+            };
+          } catch (enrollmentError) {
+            // If there's an error getting enrollment status, just return the course
+            request.log.warn(
+              {
+                operation: 'getCourseById.checkEnrollment',
+                courseId,
+                userId,
+                error: enrollmentError instanceof Error ? enrollmentError.message : 'Unknown error',
+                requestId: request.id,
+              },
+              'Error getting enrollment status',
+            );
+          }
+        }
 
         return course;
       } catch (error) {
@@ -852,6 +894,42 @@ export class CourseController {
         );
 
         throw new NotFoundError('Lesson not found');
+      }
+
+      // If user is authenticated, update last watched lesson
+      const userId = (request as any).user?.id;
+      if (userId) {
+        try {
+          // Import the EnrollmentHelpers from the enrollment directory
+          // Automatically track that the user has viewed this lesson
+          await EnrollmentHelpers.updateLastWatchedLesson(userId, courseId, lessonId);
+
+          request.log.info(
+            {
+              operation: 'getLesson.updateLastWatched',
+              courseId,
+              moduleId,
+              lessonId,
+              userId,
+              requestId: request.id,
+            },
+            `Updated last watched lesson for user ${userId}`,
+          );
+        } catch (enrollmentError) {
+          // If there's an error updating last watched lesson, just log it and continue
+          request.log.warn(
+            {
+              operation: 'getLesson.updateLastWatched',
+              courseId,
+              moduleId,
+              lessonId,
+              userId,
+              error: enrollmentError instanceof Error ? enrollmentError.message : 'Unknown error',
+              requestId: request.id,
+            },
+            'Error updating last watched lesson',
+          );
+        }
       }
 
       request.log.info(
