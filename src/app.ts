@@ -15,6 +15,7 @@ import courseRoutes from './modules/course/course.route';
 // import videoRoutes from './modules/course/video.route';
 import hlsRoutes from './modules/course/hls.route';
 import enrollmentModule from './modules/enrollment';
+import { userRoutes } from './modules/user/user.route';
 // Import other module routes (e.g., userRoutes) if you have them
 
 import type { PinoLoggerOptions } from 'fastify/types/logger';
@@ -389,6 +390,8 @@ export function buildApp(): FastifyInstance {
   fastify.register(hlsRoutes, { prefix: '/api/hls' });
   // Register enrollment module (from enrollment directory)
   fastify.register(enrollmentModule);
+  // Register admin user routes
+  fastify.register(userRoutes, { prefix: '/api/admin' });
   // Register other routes...
   // fastify.register(userRoutes, { prefix: '/api/users' });
 
