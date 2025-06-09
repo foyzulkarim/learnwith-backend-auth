@@ -2,24 +2,26 @@
 import { FastifyInstance } from 'fastify';
 import { User } from './types';
 import { getUserModel, UserDocument } from './user.model';
-import { CreateUserInput, UpdateUserInput, UserRole } from './user.schema'; // Import new schemas
+import {
+  CreateUserInput,
+  UpdateUserInput,
+  UserRole,
+  GetAllUsersQueryType, // Import for query parameters
+  PaginatedUsersResponseType, // Import for the new response structure
+} from './user.schema';
 import { ValidationError, DatabaseError, NotFoundError } from '../../utils/errors';
 import { createLogger, Logger } from '../../utils/logger';
-import { hashPassword } from '../../utils/hash'; // Import hashing utility
+import { hashPassword } from '../../utils/hash';
 
-// Define the structure of the Google profile data we expect
-// This matches the OpenID Connect format that Google returns
 export interface GoogleUserProfile {
-  sub?: string; // OpenID Connect standard - Google's unique user ID
-  id?: string; // Alternative ID field (for backward compatibility)
-  name?: string; // User's full name
-  given_name?: string; // User's first name
-  family_name?: string; // User's last name
-  email?: string; // User's email address
-  email_verified?: boolean; // Whether email is verified
-  picture?: string; // URL to user's profile picture
-
-  // Legacy format support (for backward compatibility)
+  sub?: string;
+  id?: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+  email?: string;
+  email_verified?: boolean;
+  picture?: string;
   displayName?: string;
   emails?: Array<{ value: string; verified?: boolean }>;
   photos?: Array<{ value: string }>;
@@ -37,8 +39,7 @@ export class UserService {
 
   /**
    * Creates a new user.
-   * @param userData - Data for creating the user.
-   * @returns The created user.
+   * Default isDeleted: false and deletedAt: null are handled by the model.
    */
   async createUser(userData: CreateUserInput): Promise<User> {
     const logContext = this.logger.startOperation('UserService.createUser', {
@@ -47,338 +48,294 @@ export class UserService {
     });
 
     try {
-      this.logger.info(
-        { operation: 'UserService.createUser', step: 'hashing_password', email: userData.email },
-        'Hashing user password',
-      );
+      this.logger.info({ /* ... */ }, 'Hashing user password');
       const hashedPassword = await hashPassword(userData.password);
 
-      this.logger.info(
-        { operation: 'UserService.createUser', step: 'creating_user_in_db', email: userData.email },
-        'Creating new user in database',
-      );
+      this.logger.info({ /* ... */ }, 'Creating new user in database');
+      // isDeleted and deletedAt will use model defaults
       const newUserDoc = await this.userModel.create({
         ...userData,
         password: hashedPassword,
-        role: userData.role || 'viewer', // Ensure role is set, defaulting if not provided
+        role: userData.role || 'viewer',
       });
 
       const result = this.convertToUser(newUserDoc);
-      this.logger.endOperation(logContext, `User created successfully: ${result.email}`, {
-        userId: result.id,
-        email: result.email,
-      });
+      this.logger.endOperation(logContext, `User created successfully: ${result.email}`, { /* ... */ });
       return result;
     } catch (error) {
       this.logger.errorOperation(logContext, error, 'Error creating user', { email: userData.email });
       if (error instanceof Error && error.message.includes('duplicate key error')) {
         throw new ValidationError('User with this email already exists.', 'USER_EMAIL_DUPLICATE');
       }
-      throw new DatabaseError(
-        `Error creating user: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'USER_CREATE_ERROR',
-      );
+      throw new DatabaseError(`Error creating user: ${error instanceof Error ? error.message : 'Unknown error'}`, 'USER_CREATE_ERROR');
     }
   }
 
   /**
-   * Retrieves all users.
-   * @returns An array of all users.
+   * Retrieves a paginated, sorted, and filtered list of users.
    */
-  async getAllUsers(): Promise<User[]> {
-    const logContext = this.logger.startOperation('UserService.getAllUsers');
+  async getAllUsers(options: GetAllUsersQueryType): Promise<PaginatedUsersResponseType> {
+    const logContext = this.logger.startOperation('UserService.getAllUsers', { options });
     try {
-      this.logger.info(
-        { operation: 'UserService.getAllUsers', step: 'fetching_all_users' },
-        'Fetching all users from database',
-      );
-      const usersDocs = await this.userModel.find({});
+      const {
+        page = 1,
+        limit = 10,
+        sortBy = 'createdAt',
+        sortOrder = 'desc',
+        search,
+        role,
+        isDeleted = false, // Default to not showing deleted users unless explicitly requested
+      } = options;
+
+      const queryConditions: any = { isDeleted };
+
+      if (search) {
+        const searchRegex = new RegExp(search, 'i');
+        queryConditions.$or = [{ name: searchRegex }, { email: searchRegex }];
+      }
+
+      if (role) {
+        queryConditions.role = role;
+      }
+
+      this.logger.info({ operation: 'UserService.getAllUsers', step: 'query_construction', queryConditions }, 'Constructed query conditions');
+
+      const sortOptions: any = {};
+      sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+      const skip = (page - 1) * limit;
+
+      this.logger.info({ operation: 'UserService.getAllUsers', step: 'fetching_users_from_db', queryConditions, sortOptions, skip, limit }, 'Fetching users from database');
+      const usersDocs = await this.userModel
+        .find(queryConditions)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .exec();
+
+      this.logger.info({ operation: 'UserService.getAllUsers', step: 'counting_total_users', queryConditions }, 'Counting total users');
+      const totalUsers = await this.userModel.countDocuments(queryConditions);
+
       const users = usersDocs.map((doc) => this.convertToUser(doc));
+      const totalPages = Math.ceil(totalUsers / limit);
 
-      this.logger.endOperation(logContext, `Retrieved ${users.length} users successfully.`, {
-        userCount: users.length,
-      });
-      return users;
+      const response = { users, totalUsers, totalPages, currentPage: page, limit };
+      this.logger.endOperation(logContext, `Retrieved ${users.length} users successfully.`, { response });
+      return response;
+
     } catch (error) {
-      this.logger.errorOperation(logContext, error, 'Error retrieving all users');
-      throw new DatabaseError(
-        `Error retrieving users: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'USER_LIST_ERROR',
-      );
+      this.logger.errorOperation(logContext, error, 'Error retrieving all users', { options });
+      throw new DatabaseError(`Error retrieving users: ${error instanceof Error ? error.message : 'Unknown error'}`, 'USER_LIST_ERROR');
     }
   }
 
   /**
-   * Finds a user by their ID.
-   * @param id - The user's ID.
-   * @returns The user or null if not found.
+   * Finds a user by their ID, optionally including soft-deleted users.
    */
-  async getUserById(id: string): Promise<User | null> {
-    const logContext = this.logger.startOperation('UserService.getUserById', { userId: id });
+  async getUserById(id: string, includeDeleted: boolean = false): Promise<User | null> {
+    const logContext = this.logger.startOperation('UserService.getUserById', { userId: id, includeDeleted });
     try {
-      this.logger.info(
-        { operation: 'UserService.getUserById', step: 'database_lookup', userId: id },
-        'Looking up user by ID in database',
-      );
-      const userDoc = await this.userModel.findById(id);
+      const queryConditions: any = { _id: id };
+      if (!includeDeleted) {
+        queryConditions.isDeleted = false;
+      }
+
+      this.logger.info({ operation: 'UserService.getUserById', step: 'database_lookup', queryConditions }, 'Looking up user by ID in database');
+      const userDoc = await this.userModel.findOne(queryConditions);
 
       if (!userDoc) {
-        this.logger.warn(
-          { operation: 'UserService.getUserById', userId: id, found: false },
-          `User not found: ${id}`,
-        );
-        this.logger.endOperation(logContext, `User not found: ${id}`, { userId: id, found: false });
-        return null; // Consistent with original findUserById behavior for not found
+        this.logger.warn({ /* ... */ }, `User not found: ${id}`);
+        this.logger.endOperation(logContext, `User not found: ${id}`, { found: false });
+        return null;
       }
 
       const result = this.convertToUser(userDoc);
-      this.logger.endOperation(logContext, `User found: ${result.email}`, {
-        userId: result.id,
-        email: result.email,
-        found: true,
-      });
+      this.logger.endOperation(logContext, `User found: ${result.email}`, { found: true });
       return result;
     } catch (error) {
       this.logger.errorOperation(logContext, error, 'Error finding user by ID', { userId: id });
-      // Handle invalid ObjectId format specifically if possible, otherwise general DB error
       if (error instanceof Error && error.name === 'CastError') {
         throw new ValidationError('Invalid user ID format.', 'USER_ID_INVALID');
       }
-      throw new DatabaseError(
-        `Error finding user: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'USER_LOOKUP_ERROR',
-      );
+      throw new DatabaseError(`Error finding user: ${error instanceof Error ? error.message : 'Unknown error'}`, 'USER_LOOKUP_ERROR');
     }
   }
 
   /**
-   * Updates an existing user.
-   * @param id - The ID of the user to update.
-   * @param updateData - Data to update the user with.
-   * @returns The updated user.
+   * Updates an existing non-deleted user.
+   * Does not allow updating isDeleted or deletedAt.
    */
   async updateUser(id: string, updateData: UpdateUserInput): Promise<User> {
-    const logContext = this.logger.startOperation('UserService.updateUser', {
-      userId: id,
-      updateData,
-    });
+    const logContext = this.logger.startOperation('UserService.updateUser', { userId: id, updateData });
     try {
-      this.logger.info(
-        { operation: 'UserService.updateUser', step: 'finding_user_for_update', userId: id },
-        'Finding user to update',
-      );
-      const userDoc = await this.userModel.findById(id);
+      this.logger.info({ /* ... */ }, 'Finding non-deleted user to update');
+      // Ensure we only update non-deleted users
+      const userDoc = await this.userModel.findOne({ _id: id, isDeleted: false });
 
       if (!userDoc) {
-        this.logger.warn(
-          { operation: 'UserService.updateUser', userId: id, found: false },
-          `User not found for update: ${id}`,
-        );
-        throw new NotFoundError(`User with ID ${id} not found.`);
+        this.logger.warn({ /* ... */ }, `Non-deleted user not found for update: ${id}`);
+        throw new NotFoundError(`User with ID ${id} not found or has been deleted.`);
       }
 
-      // Update provided fields
-      if (updateData.name !== undefined) {
-        userDoc.name = updateData.name;
-      }
-      if (updateData.email !== undefined) {
-        userDoc.email = updateData.email;
-      }
-      if (updateData.role !== undefined) {
-        userDoc.role = updateData.role as UserRole; // Cast to UserRole type
-      }
+      if (updateData.name !== undefined) userDoc.name = updateData.name;
+      if (updateData.email !== undefined) userDoc.email = updateData.email;
+      if (updateData.role !== undefined) userDoc.role = updateData.role as UserRole;
 
-      this.logger.info(
-        { operation: 'UserService.updateUser', step: 'saving_updated_user', userId: id },
-        'Saving updated user data',
-      );
+      this.logger.info({ /* ... */ }, 'Saving updated user data');
       const updatedUserDoc = await userDoc.save();
       const result = this.convertToUser(updatedUserDoc);
 
-      this.logger.endOperation(logContext, `User updated successfully: ${result.email}`, {
-        userId: result.id,
-        email: result.email,
-      });
+      this.logger.endOperation(logContext, `User updated successfully: ${result.email}`, { /* ... */ });
       return result;
     } catch (error) {
-      this.logger.errorOperation(logContext, error, 'Error updating user', { userId: id, updateData });
+      this.logger.errorOperation(logContext, error, 'Error updating user', { /* ... */ });
       if (error instanceof NotFoundError) throw error;
       if (error instanceof Error && error.message.includes('duplicate key error')) {
         throw new ValidationError('This email is already in use by another account.', 'USER_EMAIL_DUPLICATE_UPDATE');
       }
-      throw new DatabaseError(
-        `Error updating user: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'USER_UPDATE_ERROR',
-      );
+      throw new DatabaseError(`Error updating user: ${error instanceof Error ? error.message : 'Unknown error'}`, 'USER_UPDATE_ERROR');
     }
   }
 
   /**
-   * Deletes a user by their ID.
-   * @param id - The ID of the user to delete.
-   * @returns Confirmation of deletion.
+   * Soft deletes a user by their ID.
    */
-  async deleteUser(id: string): Promise<{ success: boolean; message: string; userId: string }> {
+  async deleteUser(id: string): Promise<User> { // Changed return type
     const logContext = this.logger.startOperation('UserService.deleteUser', { userId: id });
     try {
-      this.logger.info(
-        { operation: 'UserService.deleteUser', step: 'finding_user_for_deletion', userId: id },
-        'Finding user to delete',
-      );
-      const userDoc = await this.userModel.findById(id);
+      this.logger.info({ /* ... */ }, 'Finding user to soft delete');
+      // Check if user exists and is not already deleted.
+      // If you want to allow "re-deleting" a deleted user (just updating deletedAt), remove isDeleted: false.
+      const userDoc = await this.userModel.findOne({ _id: id, isDeleted: false });
 
       if (!userDoc) {
-        this.logger.warn(
-          { operation: 'UserService.deleteUser', userId: id, found: false },
-          `User not found for deletion: ${id}`,
-        );
-        throw new NotFoundError(`User with ID ${id} not found.`);
+        this.logger.warn({ /* ... */ }, `User not found or already deleted: ${id}`);
+        throw new NotFoundError(`User with ID ${id} not found or already deleted.`);
       }
 
-      this.logger.info(
-        { operation: 'UserService.deleteUser', step: 'deleting_user_from_db', userId: id },
-        'Deleting user from database',
-      );
-      await this.userModel.findByIdAndDelete(id);
+      userDoc.isDeleted = true;
+      userDoc.deletedAt = new Date();
 
-      this.logger.endOperation(logContext, `User deleted successfully: ${id}`, { userId: id });
-      return { success: true, message: 'User deleted successfully', userId: id };
+      this.logger.info({ operation: 'UserService.deleteUser', step: 'soft_deleting_user_in_db', userId: id }, 'Soft deleting user in database');
+      const softDeletedUserDoc = await userDoc.save();
+      const result = this.convertToUser(softDeletedUserDoc);
+
+      this.logger.endOperation(logContext, `User soft deleted successfully: ${id}`, { /* ... */ });
+      return result; // Return the soft-deleted user object
     } catch (error) {
-      this.logger.errorOperation(logContext, error, 'Error deleting user', { userId: id });
+      this.logger.errorOperation(logContext, error, 'Error soft deleting user', { userId: id });
       if (error instanceof NotFoundError) throw error;
-      throw new DatabaseError(
-        `Error deleting user: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'USER_DELETE_ERROR',
-      );
+      throw new DatabaseError(`Error soft deleting user: ${error instanceof Error ? error.message : 'Unknown error'}`, 'USER_DELETE_ERROR');
     }
   }
 
-
   /**
-   * Finds an existing user by their Google ID or email,
+   * Finds an existing non-deleted user by their Google ID or email,
    * or creates a new user if one doesn't exist.
-   * @param profile - User profile information obtained from Google.
-   * @returns The found or created User object.
    */
   async findOrCreateUserByGoogleProfile(profile: GoogleUserProfile): Promise<User> {
-    const logContext = this.logger.startOperation('UserService.findOrCreateUserByGoogleProfile', {
-      googleId: profile.sub || profile.id,
-      email: profile.email,
-    });
-
+    const logContext = this.logger.startOperation('UserService.findOrCreateUserByGoogleProfile', { /* ... */ });
     try {
       const googleId = profile.sub || profile.id;
-      if (!googleId) {
-        this.logger.warn(
-          { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'validation_failed' },
-          'Google profile ID is missing.',
-        );
-        throw new ValidationError('Google profile ID is missing.', 'GOOGLE_PROFILE_INVALID');
-      }
+      if (!googleId) { /* ... */ throw new ValidationError('Google profile ID is missing.', 'GOOGLE_PROFILE_INVALID'); }
+      const email = profile.email || (profile.emails && profile.emails.length > 0 ? profile.emails[0].value : undefined);
+      if (!email) { /* ... */ throw new ValidationError('Google profile email is missing.', 'GOOGLE_PROFILE_INVALID'); }
+      const name = profile.name || profile.displayName || `${profile.given_name || ''} ${profile.family_name || ''}`.trim() || 'User';
 
-      const email =
-        profile.email ||
-        (profile.emails && profile.emails.length > 0 ? profile.emails[0].value : undefined);
+      this.logger.info({ /* ... */ }, 'Google profile processed');
 
-      if (!email) {
-        this.logger.warn(
-          { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'validation_failed', googleId },
-          'Google profile email is missing.',
-        );
-        throw new ValidationError('Google profile email is missing.', 'GOOGLE_PROFILE_INVALID');
-      }
-
-      const name =
-        profile.name ||
-        profile.displayName ||
-        `${profile.given_name || ''} ${profile.family_name || ''}`.trim() ||
-        'User';
-
-      this.logger.info(
-        { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'profile_processed', googleId, email, name },
-        'Google profile processed',
-      );
-
-      let userDoc = await this.userModel.findOne({ googleId });
+      // Look for non-deleted user by Google ID
+      let userDoc = await this.userModel.findOne({ googleId, isDeleted: false });
 
       if (userDoc) {
-        this.logger.info(
-          { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'found_by_google_id', userId: userDoc._id.toString() },
-          'User found by Google ID',
-        );
+        this.logger.info({ /* ... */ }, 'Non-deleted user found by Google ID');
         if (userDoc.name !== name) {
           userDoc.name = name;
           await userDoc.save();
         }
         const result = this.convertToUser(userDoc);
-        this.logger.endOperation(logContext, `User found by Google ID: ${result.email}`, { userId: result.id, action: 'found_existing' });
+        this.logger.endOperation(logContext, `User found by Google ID: ${result.email}`, { /* ... */ });
         return result;
       }
 
-      this.logger.info(
-        { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'lookup_by_email', email },
-        'Looking up user by email',
-      );
-      userDoc = await this.userModel.findOne({ email });
+      this.logger.info({ /* ... */ }, 'Looking up non-deleted user by email');
+      // Look for non-deleted user by email
+      userDoc = await this.userModel.findOne({ email, isDeleted: false });
 
       if (userDoc) {
-        this.logger.info(
-          { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'found_by_email_linking_google', userId: userDoc._id.toString() },
-          'User found by email, linking Google account',
-        );
+        this.logger.info({ /* ... */ }, 'Non-deleted user found by email, linking Google account');
         userDoc.googleId = googleId;
-        if (!userDoc.name) userDoc.name = name; // Only set name if it wasn't set
+        if (!userDoc.name) userDoc.name = name;
         await userDoc.save();
         const result = this.convertToUser(userDoc);
-        this.logger.endOperation(logContext, `User found by email and linked: ${result.email}`, { userId: result.id, action: 'linked_google' });
-        this.logger.logMetric('google_account_linked', { userId: result.id, email: result.email });
+        this.logger.endOperation(logContext, `User found by email and linked: ${result.email}`, { /* ... */ });
+        this.logger.logMetric('google_account_linked', { /* ... */ });
         return result;
       }
 
-      this.logger.info(
-        { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'creating_new_user', email, googleId },
-        'Creating new user with Google profile',
-      );
-      userDoc = await this.userModel.create({
-        email,
-        googleId,
-        name,
-        role: 'viewer', // Default role
-      });
+      this.logger.info({ /* ... */ }, 'Creating new user with Google profile');
+      // isDeleted and deletedAt will use model defaults
+      userDoc = await this.userModel.create({ email, googleId, name, role: 'viewer' });
       const result = this.convertToUser(userDoc);
-      this.logger.endOperation(logContext, `New user created via Google: ${result.email}`, { userId: result.id, action: 'created_new' });
-      this.logger.logMetric('user_created_via_google', { userId: result.id, email: result.email, role: result.role });
+      this.logger.endOperation(logContext, `New user created via Google: ${result.email}`, { /* ... */ });
+      this.logger.logMetric('user_created_via_google', { /* ... */ });
       return result;
 
     } catch (error) {
-      this.logger.errorOperation(logContext, error, 'Error in findOrCreateUserByGoogleProfile', { googleId: profile.sub || profile.id, email: profile.email });
-      if (error instanceof ValidationError || error instanceof DatabaseError) {
-        throw error;
-      }
-      throw new DatabaseError(
-        `Error processing Google profile: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'GOOGLE_PROFILE_PROCESSING_ERROR',
-      );
+      this.logger.errorOperation(logContext, error, 'Error in findOrCreateUserByGoogleProfile', { /* ... */ });
+      if (error instanceof ValidationError || error instanceof DatabaseError) throw error;
+      throw new DatabaseError(`Error processing Google profile: ${error instanceof Error ? error.message : 'Unknown error'}`, 'GOOGLE_PROFILE_PROCESSING_ERROR');
     }
   }
 
   /**
    * Converts a Mongoose user document to a plain User object.
-   * Ensures all fields expected by the User type are present.
-   * @param userDoc - The Mongoose user document.
-   * @returns A plain User object.
    */
   private convertToUser(userDoc: UserDocument): User {
-    const userObject = userDoc.toObject({ virtuals: true }); // Ensure virtuals like id are included if defined in schema
+    const userObject = userDoc.toObject({ virtuals: true });
     return {
-      id: userObject._id.toString(), // Mongoose typically uses _id
+      id: userObject._id.toString(),
       email: userObject.email,
-      name: userObject.name || null, // Ensure name is null if not present, not undefined
+      name: userObject.name || null,
       googleId: userObject.googleId || null,
-      role: userObject.role || 'viewer', // Default role if not set
-      password: userObject.password || null, // Include password if it exists on the model, though it's often excluded
+      role: userObject.role || 'viewer',
+      password: userObject.password || null, // Typically null in responses unless specifically needed
       createdAt: userObject.createdAt,
       updatedAt: userObject.updatedAt,
+      isDeleted: userObject.isDeleted ?? false, // Default to false if undefined
+      deletedAt: userObject.deletedAt || null, // Default to null if undefined
     };
+  }
+
+  /**
+   * Restores a soft-deleted user by their ID.
+   */
+  async restoreUser(id: string): Promise<User> {
+    const logContext = this.logger.startOperation('UserService.restoreUser', { userId: id });
+    try {
+      this.logger.info({ operation: 'UserService.restoreUser', step: 'finding_deleted_user', userId: id }, 'Finding soft-deleted user to restore');
+
+      // Find a user that is specifically marked as deleted
+      const userDoc = await this.userModel.findOne({ _id: id, isDeleted: true });
+
+      if (!userDoc) {
+        this.logger.warn({ operation: 'UserService.restoreUser', userId: id, found: false }, `Soft-deleted user not found or user is not deleted: ${id}`);
+        throw new NotFoundError(`User with ID ${id} not found or is not currently soft-deleted.`);
+      }
+
+      userDoc.isDeleted = false;
+      userDoc.deletedAt = null;
+
+      this.logger.info({ operation: 'UserService.restoreUser', step: 'restoring_user_in_db', userId: id }, 'Restoring user in database');
+      const restoredUserDoc = await userDoc.save();
+      const result = this.convertToUser(restoredUserDoc);
+
+      this.logger.endOperation(logContext, `User restored successfully: ${id}`, { userId: result.id, email: result.email });
+      return result;
+    } catch (error) {
+      this.logger.errorOperation(logContext, error, 'Error restoring user', { userId: id });
+      if (error instanceof NotFoundError) throw error;
+      throw new DatabaseError(`Error restoring user: ${error instanceof Error ? error.message : 'Unknown error'}`, 'USER_RESTORE_ERROR');
+    }
   }
 }

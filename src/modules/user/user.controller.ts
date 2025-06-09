@@ -3,10 +3,13 @@ import { UserService } from './user.service';
 import {
   CreateUserInput,
   UpdateUserInput,
-  UserIdParamInput as UserIdParam, // Renaming for clarity as it's used for Params type
+  UserIdParamInput as UserIdParam,
+  GetAllUsersQueryType, // For typing request.query
+  PaginatedUsersResponseType, // For typing the response of getAllUsers
+  UserResponseType, // For typing the response of deleteUser
 } from './user.schema';
 import { NotFoundError, ValidationError, DatabaseError } from '../../utils/errors';
-import { User } from './types'; // Assuming User type is defined for responses
+// User type for responses is implicitly handled by UserResponseType, PaginatedUsersResponseType etc.
 
 export class UserController {
   constructor(private userService: UserService) {}
@@ -23,39 +26,43 @@ export class UserController {
       reply.code(201).send(user);
     } catch (error) {
       if (error instanceof ValidationError) {
-        reply.code(409).send({ message: error.message, errorCode: error.errorCode }); // 409 for duplicate
+        reply.code(409).send({ message: error.message, errorCode: error.errorCode });
       } else if (error instanceof DatabaseError) {
         reply.code(500).send({ message: 'Database error creating user.' });
       } else {
-        reply.code(500).send({ message: 'An unexpected error occurred.' });
+        reply.code(500).send({ message: 'An unexpected error occurred creating user.' });
       }
     }
   }
 
   /**
-   * Handles request to get all users.
+   * Handles request to get all users with pagination, sorting, and filtering.
    */
   async getAllUsersHandler(
-    request: FastifyRequest,
+    request: FastifyRequest<{ Querystring: GetAllUsersQueryType }>, // Updated request type
     reply: FastifyReply,
   ): Promise<void> {
     try {
-      const users = await this.userService.getAllUsers();
-      reply.code(200).send(users);
+      // request.query is validated and typed by Fastify based on schema in user.route.ts
+      const paginatedResult = await this.userService.getAllUsers(request.query);
+      reply.code(200).send(paginatedResult);
     } catch (error) {
-      // Assuming getAllUsers primarily throws DatabaseError or generic errors
+      // Log the error if necessary, or rely on a global error handler
+      // request.log.error(error, 'Error in getAllUsersHandler');
       reply.code(500).send({ message: 'Error retrieving users.' });
     }
   }
 
   /**
    * Handles request to get a single user by their ID.
+   * (Defaults to not including soft-deleted users)
    */
   async getUserByIdHandler(
     request: FastifyRequest<{ Params: UserIdParam }>,
     reply: FastifyReply,
   ): Promise<void> {
     try {
+      // Calling service method which defaults to not including deleted users
       const user = await this.userService.getUserById(request.params.id);
       if (user) {
         reply.code(200).send(user);
@@ -63,12 +70,12 @@ export class UserController {
         reply.code(404).send({ message: 'User not found.' });
       }
     } catch (error) {
-      if (error instanceof ValidationError) { // For invalid ID format
+      if (error instanceof ValidationError) {
         reply.code(400).send({ message: error.message, errorCode: error.errorCode });
       } else if (error instanceof DatabaseError) {
         reply.code(500).send({ message: 'Database error retrieving user.' });
       } else {
-        reply.code(500).send({ message: 'An unexpected error occurred.' });
+        reply.code(500).send({ message: 'An unexpected error occurred retrieving user.' });
       }
     }
   }
@@ -86,58 +93,65 @@ export class UserController {
     } catch (error) {
       if (error instanceof NotFoundError) {
         reply.code(404).send({ message: error.message });
-      } else if (error instanceof ValidationError) { // e.g. duplicate email on update
+      } else if (error instanceof ValidationError) {
         reply.code(409).send({ message: error.message, errorCode: error.errorCode });
       } else if (error instanceof DatabaseError) {
         reply.code(500).send({ message: 'Database error updating user.' });
       } else {
-        reply.code(500).send({ message: 'An unexpected error occurred.' });
+        reply.code(500).send({ message: 'An unexpected error occurred updating user.' });
       }
     }
   }
 
   /**
-   * Handles request to delete a user by their ID.
+   * Handles request to soft delete a user by their ID.
+   * Returns the soft-deleted user object.
    */
   async deleteUserHandler(
     request: FastifyRequest<{ Params: UserIdParam }>,
     reply: FastifyReply,
   ): Promise<void> {
     try {
-      const result = await this.userService.deleteUser(request.params.id);
-      // Send 200 with message, or 204 if preferred (though 200 with body is common for delete confirmations)
-      reply.code(200).send(result);
+      // UserService.deleteUser now returns the soft-deleted user
+      const user = await this.userService.deleteUser(request.params.id);
+      reply.code(200).send(user); // Send the updated user object as confirmation
     } catch (error) {
       if (error instanceof NotFoundError) {
         reply.code(404).send({ message: error.message });
       } else if (error instanceof DatabaseError) {
         reply.code(500).send({ message: 'Database error deleting user.' });
       } else {
-        reply.code(500).send({ message: 'An unexpected error occurred.' });
+        reply.code(500).send({ message: 'An unexpected error occurred deleting user.' });
+      }
+    }
+  }
+
+  /**
+   * Handles request to restore a soft-deleted user by their ID.
+   * Returns the restored user object.
+   */
+  async restoreUserHandler(
+    request: FastifyRequest<{ Params: UserIdParam }>,
+    reply: FastifyReply,
+  ): Promise<void> {
+    try {
+      const user = await this.userService.restoreUser(request.params.id);
+      // request.log.info(`User restored successfully: ${user.id}`); // Example of logging
+      reply.code(200).send(user);
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        // This covers cases where the user is not found, or found but not in a soft-deleted state.
+        reply.code(404).send({ message: error.message });
+      } else if (error instanceof DatabaseError) {
+        reply.code(500).send({ message: 'Database error restoring user.' });
+      } else {
+        // request.log.error(error, 'Unexpected error in restoreUserHandler'); // Example of logging
+        reply.code(500).send({ message: 'An unexpected error occurred restoring user.' });
       }
     }
   }
 }
 
-// The instantiation of UserController and UserService will typically be handled
-// in the main application setup (e.g., where Fastify instance is created and plugins are registered)
-// to allow for proper dependency injection and lifecycle management.
-// For now, we export the class. The routing setup will use this controller.
-// Example (actual instantiation will be in app.ts or user.route.ts):
-//
-// import { FastifyInstance } from 'fastify';
-// import { UserService } from './user.service';
-//
-// export function registerUserController(fastify: FastifyInstance) {
-//   const userService = new UserService(fastify); // Assuming service needs fastify
-//   const userController = new UserController(userService);
-//   // then register routes with controller methods
-// }
-//
-// Or, if UserService doesn't need fastify directly:
-//
-// const userService = new UserService(); // Potentially if UserModel is self-contained
-// export const userController = new UserController(userService);
-//
-// For this subtask, only the class definition is required.
-// The routing file will be responsible for instantiating it.
+// Instantiation and registration are handled in user.route.ts and app.ts
+// No changes needed here for that.
+// Controller remains focused on handling request/response logic and delegating to service.

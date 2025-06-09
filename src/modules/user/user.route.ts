@@ -6,21 +6,13 @@ import {
   updateUserSchema,
   userIdParamSchema,
   userResponseSchema,
-  usersResponseSchema,
-  UserResponse, // For response type in delete
+  // usersResponseSchema, // Replaced by paginatedUsersResponseSchema
+  getAllUsersQuerySchema, // For GET /users querystring
+  paginatedUsersResponseSchema, // For GET /users response
+  UserResponseType, // For delete response, if UserResponse is not the Zod object
 } from './user.schema';
 import { authenticate, authorizeRoles } from '../../utils/authMiddleware';
 import { Role } from './types'; // Import Role for authorizeRoles
-
-// Define a simple response schema for delete operations
-const deleteResponseSchema = {
-  type: 'object',
-  properties: {
-    success: { type: 'boolean' },
-    message: { type: 'string' },
-    userId: { type: 'string' },
-  },
-};
 
 export async function userRoutes(fastify: FastifyInstance) {
   // Instantiate service and controller
@@ -61,11 +53,12 @@ export async function userRoutes(fastify: FastifyInstance) {
     '/users',
     {
       schema: {
-        description: 'Get a list of all users. Requires admin privileges.',
+        description: 'Get a list of all users with pagination, sorting, and filtering. Requires admin privileges.',
         tags: ['Admin Users'],
-        summary: 'List All Users',
+        summary: 'List All Users (Paginated)',
+        querystring: getAllUsersQuerySchema, // Added querystring schema
         response: {
-          200: usersResponseSchema,
+          200: paginatedUsersResponseSchema, // Updated response schema
         },
       },
       preHandler: adminPreHandlers,
@@ -119,15 +112,34 @@ export async function userRoutes(fastify: FastifyInstance) {
       schema: {
         description: 'Delete a user by their ID. Requires admin privileges.',
         tags: ['Admin Users'],
-        summary: 'Delete User',
+        summary: 'Delete User (Soft Delete)',
         params: userIdParamSchema,
         response: {
-          200: deleteResponseSchema, // Using the simple success message schema
+          200: userResponseSchema, // Updated: returns the full soft-deleted user object
           404: { description: 'User not found', type: 'object', properties: { message: { type: 'string' } } },
         },
       },
       preHandler: adminPreHandlers,
     },
     userController.deleteUserHandler.bind(userController),
+  );
+
+  // Restore User
+  fastify.put(
+    '/users/:id/restore',
+    {
+      schema: {
+        description: 'Restore a soft-deleted user by their ID. Requires admin privileges.',
+        tags: ['Admin Users'],
+        summary: 'Restore User',
+        params: userIdParamSchema,
+        response: {
+          200: userResponseSchema,
+          404: { description: 'User not found or not soft-deleted', type: 'object', properties: { message: { type: 'string' } } },
+        },
+      },
+      preHandler: adminPreHandlers,
+    },
+    userController.restoreUserHandler.bind(userController),
   );
 }
