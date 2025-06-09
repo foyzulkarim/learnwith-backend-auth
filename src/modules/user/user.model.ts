@@ -18,7 +18,12 @@ const UserSchema = new Schema<UserDocument>(
       default: 'viewer',
       required: true,
     },
-    // Add any other fields needed
+    bio: { type: String, default: '' },
+    emailPreferences: {
+      marketing: { type: Boolean, default: true },
+      coursesUpdates: { type: Boolean, default: true },
+      accountNotifications: { type: Boolean, default: true },
+    },
   },
   {
     timestamps: true, // Adds createdAt and updatedAt fields

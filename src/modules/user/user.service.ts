@@ -34,6 +34,159 @@ export class UserService {
   }
 
   /**
+   * Updates a user's profile information
+   * @param userId - The user's ID
+   * @param profileData - The updated profile data
+   * @returns The updated user or null if not found
+   */
+  async updateProfile(
+    userId: string,
+    profileData: {
+      name?: string;
+      email?: string;
+      bio?: string;
+      emailPreferences?: {
+        marketing?: boolean;
+        coursesUpdates?: boolean;
+        accountNotifications?: boolean;
+      };
+    },
+  ): Promise<User | null> {
+    const logContext = this.logger.startOperation('UserService.updateProfile', {
+      userId,
+      updateFields: Object.keys(profileData),
+    });
+
+    try {
+      // Prepare the update object with only the fields that are provided
+      const updateData: any = {};
+      
+      if (profileData.name !== undefined) updateData.name = profileData.name;
+      if (profileData.bio !== undefined) updateData.bio = profileData.bio;
+      
+      // Handle email update (needs validation)
+      if (profileData.email !== undefined) {
+        // Check if email is already taken by another user
+        const existingUser = await this.userModel.findOne({ 
+          email: profileData.email,
+          _id: { $ne: userId } 
+        });
+        
+        if (existingUser) {
+          this.logger.warn(
+            {
+              operation: 'UserService.updateProfile',
+              userId,
+              email: profileData.email,
+              conflict: true,
+            },
+            `Email ${profileData.email} is already in use by another user`,
+          );
+          throw new ValidationError('Email is already in use', 'EMAIL_ALREADY_IN_USE');
+        }
+        
+        updateData.email = profileData.email;
+      }
+      
+      // Handle emailPreferences update
+      if (profileData.emailPreferences) {
+        const preferences = profileData.emailPreferences;
+        
+        // Use $set for nested fields, only including the provided ones
+        if (preferences.marketing !== undefined) {
+          updateData['emailPreferences.marketing'] = preferences.marketing;
+        }
+        if (preferences.coursesUpdates !== undefined) {
+          updateData['emailPreferences.coursesUpdates'] = preferences.coursesUpdates;
+        }
+        if (preferences.accountNotifications !== undefined) {
+          updateData['emailPreferences.accountNotifications'] = preferences.accountNotifications;
+        }
+      }
+
+      // Skip the update if there's nothing to update
+      if (Object.keys(updateData).length === 0) {
+        const user = await this.userModel.findById(userId);
+        if (!user) {
+          this.logger.warn(
+            {
+              operation: 'UserService.updateProfile',
+              userId,
+              found: false,
+            },
+            `User not found: ${userId}`,
+          );
+          
+          this.logger.endOperation(logContext, `User not found: ${userId}`, { userId, found: false });
+          return null;
+        }
+        
+        return this.convertToUser(user);
+      }
+
+      this.logger.info(
+        {
+          operation: 'UserService.updateProfile',
+          userId,
+          updateFields: Object.keys(updateData),
+        },
+        `Updating user profile: ${userId}`,
+      );
+
+      const user = await this.userModel.findByIdAndUpdate(
+        userId,
+        { $set: updateData },
+        { new: true, runValidators: true },
+      );
+
+      if (!user) {
+        this.logger.warn(
+          {
+            operation: 'UserService.updateProfile',
+            userId,
+            found: false,
+          },
+          `User not found: ${userId}`,
+        );
+        
+        this.logger.endOperation(logContext, `User not found: ${userId}`, { userId, found: false });
+        return null;
+      }
+
+      const result = this.convertToUser(user);
+
+      this.logger.endOperation(logContext, `User profile updated: ${result.email}`, {
+        userId: result.id,
+        email: result.email,
+        updateFields: Object.keys(updateData),
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.errorOperation(
+        logContext,
+        error,
+        `Error updating user profile: ${userId}`,
+        {
+          userId,
+          updateFields: Object.keys(profileData),
+        },
+      );
+
+      // If it's already one of our custom errors, rethrow it
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+
+      // Map other errors to appropriate types
+      throw new DatabaseError(
+        `Error updating user: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'USER_UPDATE_ERROR',
+      );
+    }
+  }
+
+  /**
    * Finds an existing user by their Google ID or email,
    * or creates a new user if one doesn't exist.
    * @param profile - User profile information obtained from Google.
@@ -356,6 +509,12 @@ export class UserService {
       name: user.name,
       googleId: user.googleId,
       role: user.role,
+      bio: user.bio || '',
+      emailPreferences: {
+        marketing: user.emailPreferences?.marketing ?? true,
+        coursesUpdates: user.emailPreferences?.coursesUpdates ?? true,
+        accountNotifications: user.emailPreferences?.accountNotifications ?? true,
+      },
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

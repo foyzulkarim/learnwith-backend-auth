@@ -9,7 +9,6 @@
     "npm": "11.3.0"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "build:dev": "tsc --sourceMap",
     "build:prod": "npm ci && tsc",
