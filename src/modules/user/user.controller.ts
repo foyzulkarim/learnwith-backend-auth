@@ -1,7 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { UserService } from './user.service';
 import {
-  CreateUserInput,
+  // CreateUserInput, // Removed as createUserHandler is deleted
   UpdateUserInput,
   UserIdParamInput as UserIdParam,
   GetAllUsersQueryType, // For typing request.query
@@ -13,27 +13,6 @@ import { NotFoundError, ValidationError, DatabaseError } from '../../utils/error
 
 export class UserController {
   constructor(private userService: UserService) {}
-
-  /**
-   * Handles request to create a new user.
-   */
-  async createUserHandler(
-    request: FastifyRequest<{ Body: CreateUserInput }>,
-    reply: FastifyReply,
-  ): Promise<void> {
-    try {
-      const user = await this.userService.createUser(request.body);
-      reply.code(201).send(user);
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        reply.code(409).send({ message: error.message, errorCode: error.errorCode });
-      } else if (error instanceof DatabaseError) {
-        reply.code(500).send({ message: 'Database error creating user.' });
-      } else {
-        reply.code(500).send({ message: 'An unexpected error occurred creating user.' });
-      }
-    }
-  }
 
   /**
    * Handles request to get all users with pagination, sorting, and filtering.

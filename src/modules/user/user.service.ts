@@ -3,7 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { User } from './types';
 import { getUserModel, UserDocument } from './user.model';
 import {
-  CreateUserInput,
+  // CreateUserInput, // Removed as createUser method is deleted
   UpdateUserInput,
   UserRole,
   GetAllUsersQueryType, // Import for query parameters
@@ -11,7 +11,7 @@ import {
 } from './user.schema';
 import { ValidationError, DatabaseError, NotFoundError } from '../../utils/errors';
 import { createLogger, Logger } from '../../utils/logger';
-import { hashPassword } from '../../utils/hash';
+// import { hashPassword } from '../../utils/hash'; // Removed as no longer used
 
 export interface GoogleUserProfile {
   sub?: string;
@@ -35,40 +35,6 @@ export class UserService {
   constructor(private fastify: FastifyInstance) {
     this.userModel = getUserModel();
     this.logger = createLogger(fastify);
-  }
-
-  /**
-   * Creates a new user.
-   * Default isDeleted: false and deletedAt: null are handled by the model.
-   */
-  async createUser(userData: CreateUserInput): Promise<User> {
-    const logContext = this.logger.startOperation('UserService.createUser', {
-      email: userData.email,
-      role: userData.role,
-    });
-
-    try {
-      this.logger.info({ /* ... */ }, 'Hashing user password');
-      const hashedPassword = await hashPassword(userData.password);
-
-      this.logger.info({ /* ... */ }, 'Creating new user in database');
-      // isDeleted and deletedAt will use model defaults
-      const newUserDoc = await this.userModel.create({
-        ...userData,
-        password: hashedPassword,
-        role: userData.role || 'viewer',
-      });
-
-      const result = this.convertToUser(newUserDoc);
-      this.logger.endOperation(logContext, `User created successfully: ${result.email}`, { /* ... */ });
-      return result;
-    } catch (error) {
-      this.logger.errorOperation(logContext, error, 'Error creating user', { email: userData.email });
-      if (error instanceof Error && error.message.includes('duplicate key error')) {
-        throw new ValidationError('User with this email already exists.', 'USER_EMAIL_DUPLICATE');
-      }
-      throw new DatabaseError(`Error creating user: ${error instanceof Error ? error.message : 'Unknown error'}`, 'USER_CREATE_ERROR');
-    }
   }
 
   /**

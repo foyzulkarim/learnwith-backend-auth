@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import {
-  createUserSchema,
+  // createUserSchema, // Removed as POST /users route is deleted
   updateUserSchema,
   userIdParamSchema,
   userResponseSchema,
@@ -28,25 +28,6 @@ export async function userRoutes(fastify: FastifyInstance) {
     // or if authorizeRoles expects a more specific type.
     // Ensure Role enum from './types' includes 'admin'.
   ];
-
-  // Create User
-  fastify.post(
-    '/users',
-    {
-      schema: {
-        description: 'Create a new user. Requires admin privileges.',
-        tags: ['Admin Users'],
-        summary: 'Create User',
-        body: createUserSchema,
-        response: {
-          201: userResponseSchema,
-          // Add other error responses as needed
-        },
-      },
-      preHandler: adminPreHandlers,
-    },
-    userController.createUserHandler.bind(userController),
-  );
 
   // Get All Users
   fastify.get(

@@ -9,15 +9,9 @@ export type UserRoleType = z.infer<typeof UserRole>; // Exporting the type for u
 
 // --- Core User Schemas ---
 
-// Schema for user creation
-export const createUserSchema = z.object({
-  email: z.string().email("Invalid email format").nonempty("Email is required"),
-  name: z.string().optional(),
-  password: z.string().min(8, "Password must be at least 8 characters long").nonempty("Password is required"),
-  role: UserRole.optional().default('viewer'),
-});
-
 // Schema for user update - Password should not be updated here
+// CreateUserSchema was removed as the functionality is no longer directly supported via admin API.
+// User creation is handled via Google OAuth or potentially other mechanisms in the future.
 export const updateUserSchema = z.object({
   email: z.string().email("Invalid email format").optional(),
   name: z.string().optional(),
@@ -80,7 +74,7 @@ export const paginatedUsersResponseSchema = z.object({
 });
 
 // --- Export Inferred Types ---
-export type CreateUserInput = z.infer<typeof createUserSchema>;
+// export type CreateUserInput = z.infer<typeof createUserSchema>; // Removed
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type UserIdParamInput = z.infer<typeof userIdParamSchema>;
 

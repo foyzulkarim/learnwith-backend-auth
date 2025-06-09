@@ -1,13 +1,13 @@
 import { UserService } from './user.service';
 import { getUserModel } from './user.model';
-import { hashPassword } from '../../utils/hash';
-import { CreateUserInput, UpdateUserInput, UserRole, GetAllUsersQueryType } from './user.schema';
+// import { hashPassword } from '../../utils/hash'; // Removed
+import { UpdateUserInput, UserRole, GetAllUsersQueryType } from './user.schema'; // CreateUserInput removed
 import { User } from './types';
 import { DatabaseError, NotFoundError, ValidationError } from '../../utils/errors';
 
 // Mock dependencies
 jest.mock('./user.model');
-jest.mock('../../utils/hash');
+// jest.mock('../../utils/hash'); // Removed
 jest.mock('../../utils/logger', () => ({
   createLogger: jest.fn().mockReturnValue({
     startOperation: jest.fn().mockReturnValue('logContext'), // Simulating a context object/string
@@ -71,7 +71,7 @@ describe('UserService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (getUserModel as jest.Mock).mockReturnValue(mockUserModel);
-    (hashPassword as jest.Mock).mockResolvedValue('hashedPassword');
+    // (hashPassword as jest.Mock).mockResolvedValue('hashedPassword'); // Removed
     mockFastify = { log: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() } };
     userService = new UserService(mockFastify);
   });
@@ -112,21 +112,7 @@ describe('UserService', () => {
     });
   });
 
-  describe('createUser', () => {
-    const createUserData: CreateUserInput = { email: 'new@example.com', password: 'password123', name: 'New User' };
-    it('should create a user with isDeleted false and deletedAt null by default', async () => {
-      const mockCreatedDoc = mockUserDoc({ ...createUserData, id: 'newId', isDeleted: false, deletedAt: null });
-      mockUserModel.create.mockResolvedValue(mockCreatedDoc);
-      const result = await userService.createUser(createUserData);
-      expect(mockUserModel.create).toHaveBeenCalledWith(expect.objectContaining({
-        ...createUserData,
-        password: 'hashedPassword',
-      }));
-      expect(result.isDeleted).toBe(false);
-      expect(result.deletedAt).toBeNull();
-    });
-    // Other createUser tests (duplicate, db error) remain similar
-  });
+  // createUser describe block was removed
 
   describe('getAllUsers', () => {
     const mockUsers = [

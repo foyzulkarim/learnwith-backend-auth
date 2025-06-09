@@ -1,7 +1,7 @@
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import {
-  CreateUserInput,
+  // CreateUserInput, // Removed
   UpdateUserInput,
   UserIdParamInput,
   GetAllUsersQueryType,
@@ -38,7 +38,7 @@ describe('UserController', () => {
 
     mockUserService = new (UserService as any)(null) as jest.Mocked<UserService>;
     // Manually mock all methods that will be called by the controller
-    mockUserService.createUser = jest.fn();
+    // mockUserService.createUser = jest.fn(); // Removed
     mockUserService.getAllUsers = jest.fn();
     mockUserService.getUserById = jest.fn();
     mockUserService.updateUser = jest.fn();
@@ -61,32 +61,7 @@ describe('UserController', () => {
   });
 
   // --- createUserHandler ---
-  describe('createUserHandler', () => {
-    const createUserData: CreateUserInput = { email: 'new@example.com', password: 'password123' };
-    it('should return 201 and created user on success', async () => {
-      mockRequest.body = createUserData;
-      mockUserService.createUser.mockResolvedValue(testUser); // Use a complete User object
-      await userController.createUserHandler(mockRequest, mockReply);
-      expect(mockUserService.createUser).toHaveBeenCalledWith(createUserData);
-      expect(mockReply.code).toHaveBeenCalledWith(201);
-      expect(mockReply.send).toHaveBeenCalledWith(testUser);
-    });
-    it('should return 409 if ValidationError (duplicate email)', async () => {
-      mockRequest.body = createUserData;
-      const error = new ValidationError('Duplicate email', 'USER_EMAIL_DUPLICATE');
-      mockUserService.createUser.mockRejectedValue(error);
-      await userController.createUserHandler(mockRequest, mockReply);
-      expect(mockReply.code).toHaveBeenCalledWith(409);
-      expect(mockReply.send).toHaveBeenCalledWith({ message: error.message, errorCode: error.errorCode });
-    });
-    it('should return 500 for other errors', async () => {
-      mockRequest.body = createUserData;
-      mockUserService.createUser.mockRejectedValue(new Error('Generic error'));
-      await userController.createUserHandler(mockRequest, mockReply);
-      expect(mockReply.code).toHaveBeenCalledWith(500);
-      expect(mockReply.send).toHaveBeenCalledWith({ message: 'An unexpected error occurred creating user.' });
-    });
-  });
+  // describe('createUserHandler', () => { ... }); // Removed
 
   // --- getAllUsersHandler ---
   describe('getAllUsersHandler', () => {
