@@ -2,8 +2,10 @@
 import { FastifyInstance } from 'fastify';
 import { User } from './types';
 import { getUserModel, UserDocument } from './user.model';
-import { ValidationError, DatabaseError } from '../../utils/errors';
+import { CreateUserInput, UpdateUserInput, UserRole } from './user.schema'; // Import new schemas
+import { ValidationError, DatabaseError, NotFoundError } from '../../utils/errors';
 import { createLogger, Logger } from '../../utils/logger';
+import { hashPassword } from '../../utils/hash'; // Import hashing utility
 
 // Define the structure of the Google profile data we expect
 // This matches the OpenID Connect format that Google returns
@@ -34,6 +36,225 @@ export class UserService {
   }
 
   /**
+   * Creates a new user.
+   * @param userData - Data for creating the user.
+   * @returns The created user.
+   */
+  async createUser(userData: CreateUserInput): Promise<User> {
+    const logContext = this.logger.startOperation('UserService.createUser', {
+      email: userData.email,
+      role: userData.role,
+    });
+
+    try {
+      this.logger.info(
+        { operation: 'UserService.createUser', step: 'hashing_password', email: userData.email },
+        'Hashing user password',
+      );
+      const hashedPassword = await hashPassword(userData.password);
+
+      this.logger.info(
+        { operation: 'UserService.createUser', step: 'creating_user_in_db', email: userData.email },
+        'Creating new user in database',
+      );
+      const newUserDoc = await this.userModel.create({
+        ...userData,
+        password: hashedPassword,
+        role: userData.role || 'viewer', // Ensure role is set, defaulting if not provided
+      });
+
+      const result = this.convertToUser(newUserDoc);
+      this.logger.endOperation(logContext, `User created successfully: ${result.email}`, {
+        userId: result.id,
+        email: result.email,
+      });
+      return result;
+    } catch (error) {
+      this.logger.errorOperation(logContext, error, 'Error creating user', { email: userData.email });
+      if (error instanceof Error && error.message.includes('duplicate key error')) {
+        throw new ValidationError('User with this email already exists.', 'USER_EMAIL_DUPLICATE');
+      }
+      throw new DatabaseError(
+        `Error creating user: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'USER_CREATE_ERROR',
+      );
+    }
+  }
+
+  /**
+   * Retrieves all users.
+   * @returns An array of all users.
+   */
+  async getAllUsers(): Promise<User[]> {
+    const logContext = this.logger.startOperation('UserService.getAllUsers');
+    try {
+      this.logger.info(
+        { operation: 'UserService.getAllUsers', step: 'fetching_all_users' },
+        'Fetching all users from database',
+      );
+      const usersDocs = await this.userModel.find({});
+      const users = usersDocs.map((doc) => this.convertToUser(doc));
+
+      this.logger.endOperation(logContext, `Retrieved ${users.length} users successfully.`, {
+        userCount: users.length,
+      });
+      return users;
+    } catch (error) {
+      this.logger.errorOperation(logContext, error, 'Error retrieving all users');
+      throw new DatabaseError(
+        `Error retrieving users: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'USER_LIST_ERROR',
+      );
+    }
+  }
+
+  /**
+   * Finds a user by their ID.
+   * @param id - The user's ID.
+   * @returns The user or null if not found.
+   */
+  async getUserById(id: string): Promise<User | null> {
+    const logContext = this.logger.startOperation('UserService.getUserById', { userId: id });
+    try {
+      this.logger.info(
+        { operation: 'UserService.getUserById', step: 'database_lookup', userId: id },
+        'Looking up user by ID in database',
+      );
+      const userDoc = await this.userModel.findById(id);
+
+      if (!userDoc) {
+        this.logger.warn(
+          { operation: 'UserService.getUserById', userId: id, found: false },
+          `User not found: ${id}`,
+        );
+        this.logger.endOperation(logContext, `User not found: ${id}`, { userId: id, found: false });
+        return null; // Consistent with original findUserById behavior for not found
+      }
+
+      const result = this.convertToUser(userDoc);
+      this.logger.endOperation(logContext, `User found: ${result.email}`, {
+        userId: result.id,
+        email: result.email,
+        found: true,
+      });
+      return result;
+    } catch (error) {
+      this.logger.errorOperation(logContext, error, 'Error finding user by ID', { userId: id });
+      // Handle invalid ObjectId format specifically if possible, otherwise general DB error
+      if (error instanceof Error && error.name === 'CastError') {
+        throw new ValidationError('Invalid user ID format.', 'USER_ID_INVALID');
+      }
+      throw new DatabaseError(
+        `Error finding user: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'USER_LOOKUP_ERROR',
+      );
+    }
+  }
+
+  /**
+   * Updates an existing user.
+   * @param id - The ID of the user to update.
+   * @param updateData - Data to update the user with.
+   * @returns The updated user.
+   */
+  async updateUser(id: string, updateData: UpdateUserInput): Promise<User> {
+    const logContext = this.logger.startOperation('UserService.updateUser', {
+      userId: id,
+      updateData,
+    });
+    try {
+      this.logger.info(
+        { operation: 'UserService.updateUser', step: 'finding_user_for_update', userId: id },
+        'Finding user to update',
+      );
+      const userDoc = await this.userModel.findById(id);
+
+      if (!userDoc) {
+        this.logger.warn(
+          { operation: 'UserService.updateUser', userId: id, found: false },
+          `User not found for update: ${id}`,
+        );
+        throw new NotFoundError(`User with ID ${id} not found.`);
+      }
+
+      // Update provided fields
+      if (updateData.name !== undefined) {
+        userDoc.name = updateData.name;
+      }
+      if (updateData.email !== undefined) {
+        userDoc.email = updateData.email;
+      }
+      if (updateData.role !== undefined) {
+        userDoc.role = updateData.role as UserRole; // Cast to UserRole type
+      }
+
+      this.logger.info(
+        { operation: 'UserService.updateUser', step: 'saving_updated_user', userId: id },
+        'Saving updated user data',
+      );
+      const updatedUserDoc = await userDoc.save();
+      const result = this.convertToUser(updatedUserDoc);
+
+      this.logger.endOperation(logContext, `User updated successfully: ${result.email}`, {
+        userId: result.id,
+        email: result.email,
+      });
+      return result;
+    } catch (error) {
+      this.logger.errorOperation(logContext, error, 'Error updating user', { userId: id, updateData });
+      if (error instanceof NotFoundError) throw error;
+      if (error instanceof Error && error.message.includes('duplicate key error')) {
+        throw new ValidationError('This email is already in use by another account.', 'USER_EMAIL_DUPLICATE_UPDATE');
+      }
+      throw new DatabaseError(
+        `Error updating user: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'USER_UPDATE_ERROR',
+      );
+    }
+  }
+
+  /**
+   * Deletes a user by their ID.
+   * @param id - The ID of the user to delete.
+   * @returns Confirmation of deletion.
+   */
+  async deleteUser(id: string): Promise<{ success: boolean; message: string; userId: string }> {
+    const logContext = this.logger.startOperation('UserService.deleteUser', { userId: id });
+    try {
+      this.logger.info(
+        { operation: 'UserService.deleteUser', step: 'finding_user_for_deletion', userId: id },
+        'Finding user to delete',
+      );
+      const userDoc = await this.userModel.findById(id);
+
+      if (!userDoc) {
+        this.logger.warn(
+          { operation: 'UserService.deleteUser', userId: id, found: false },
+          `User not found for deletion: ${id}`,
+        );
+        throw new NotFoundError(`User with ID ${id} not found.`);
+      }
+
+      this.logger.info(
+        { operation: 'UserService.deleteUser', step: 'deleting_user_from_db', userId: id },
+        'Deleting user from database',
+      );
+      await this.userModel.findByIdAndDelete(id);
+
+      this.logger.endOperation(logContext, `User deleted successfully: ${id}`, { userId: id });
+      return { success: true, message: 'User deleted successfully', userId: id };
+    } catch (error) {
+      this.logger.errorOperation(logContext, error, 'Error deleting user', { userId: id });
+      if (error instanceof NotFoundError) throw error;
+      throw new DatabaseError(
+        `Error deleting user: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'USER_DELETE_ERROR',
+      );
+    }
+  }
+
+
+  /**
    * Finds an existing user by their Google ID or email,
    * or creates a new user if one doesn't exist.
    * @param profile - User profile information obtained from Google.
@@ -43,47 +264,30 @@ export class UserService {
     const logContext = this.logger.startOperation('UserService.findOrCreateUserByGoogleProfile', {
       googleId: profile.sub || profile.id,
       email: profile.email,
-      hasName: !!(profile.name || profile.displayName),
-      provider: profile.provider,
     });
 
     try {
-      // Get the Google ID (sub is the OpenID Connect standard)
       const googleId = profile.sub || profile.id;
       if (!googleId) {
         this.logger.warn(
-          {
-            operation: 'UserService.findOrCreateUserByGoogleProfile',
-            step: 'validation_failed',
-            providedFields: Object.keys(profile),
-          },
-          'Google profile ID validation failed',
+          { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'validation_failed' },
+          'Google profile ID is missing.',
         );
-
         throw new ValidationError('Google profile ID is missing.', 'GOOGLE_PROFILE_INVALID');
       }
 
-      // Get the email (direct email field or from the emails array)
       const email =
         profile.email ||
         (profile.emails && profile.emails.length > 0 ? profile.emails[0].value : undefined);
 
       if (!email) {
         this.logger.warn(
-          {
-            operation: 'UserService.findOrCreateUserByGoogleProfile',
-            step: 'validation_failed',
-            googleId,
-            hasDirectEmail: !!profile.email,
-            hasEmailsArray: !!(profile.emails && profile.emails.length > 0),
-          },
-          'Google profile email validation failed',
+          { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'validation_failed', googleId },
+          'Google profile email is missing.',
         );
-
         throw new ValidationError('Google profile email is missing.', 'GOOGLE_PROFILE_INVALID');
       }
 
-      // Get the name
       const name =
         profile.name ||
         profile.displayName ||
@@ -91,273 +295,90 @@ export class UserService {
         'User';
 
       this.logger.info(
-        {
-          operation: 'UserService.findOrCreateUserByGoogleProfile',
-          step: 'profile_processed',
-          googleId,
-          email,
-          name,
-        },
-        'Google profile processed successfully',
+        { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'profile_processed', googleId, email, name },
+        'Google profile processed',
       );
 
-      // 1. Try to find user by Google ID
-      this.logger.info(
-        {
-          operation: 'UserService.findOrCreateUserByGoogleProfile',
-          step: 'lookup_by_google_id',
-          googleId,
-        },
-        'Looking up user by Google ID',
-      );
+      let userDoc = await this.userModel.findOne({ googleId });
 
-      let user = await this.userModel.findOne({ googleId });
-
-      if (user) {
+      if (userDoc) {
         this.logger.info(
-          {
-            operation: 'UserService.findOrCreateUserByGoogleProfile',
-            step: 'found_by_google_id',
-            userId: user._id.toString(),
-            email: user.email,
-            googleId,
-          },
+          { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'found_by_google_id', userId: userDoc._id.toString() },
           'User found by Google ID',
         );
-
-        // Optional: Update user's name or other details if they've changed in Google
-        if (user.name !== name) {
-          this.logger.info(
-            {
-              operation: 'UserService.findOrCreateUserByGoogleProfile',
-              step: 'updating_name',
-              userId: user._id.toString(),
-              oldName: user.name,
-              newName: name,
-            },
-            'Updating user name from Google profile',
-          );
-
-          user.name = name;
-          await user.save();
+        if (userDoc.name !== name) {
+          userDoc.name = name;
+          await userDoc.save();
         }
-
-        const result = this.convertToUser(user);
-
-        this.logger.endOperation(logContext, `User found by Google ID: ${result.email}`, {
-          userId: result.id,
-          email: result.email,
-          googleId,
-          action: 'found_existing',
-        });
-
+        const result = this.convertToUser(userDoc);
+        this.logger.endOperation(logContext, `User found by Google ID: ${result.email}`, { userId: result.id, action: 'found_existing' });
         return result;
       }
 
-      // 2. If not found by Google ID, try to find by email
-      // This handles cases where a user might have previously signed up via email
       this.logger.info(
-        {
-          operation: 'UserService.findOrCreateUserByGoogleProfile',
-          step: 'lookup_by_email',
-          email,
-        },
-        'User not found by Google ID, looking up by email',
+        { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'lookup_by_email', email },
+        'Looking up user by email',
       );
+      userDoc = await this.userModel.findOne({ email });
 
-      user = await this.userModel.findOne({ email });
-
-      if (user) {
+      if (userDoc) {
         this.logger.info(
-          {
-            operation: 'UserService.findOrCreateUserByGoogleProfile',
-            step: 'found_by_email_linking_google',
-            userId: user._id.toString(),
-            email: user.email,
-            googleId,
-          },
+          { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'found_by_email_linking_google', userId: userDoc._id.toString() },
           'User found by email, linking Google account',
         );
-
-        // User exists with this email but hasn't linked Google yet.
-        // Link the Google ID to the existing account.
-        user.googleId = googleId;
-        if (!user.name) user.name = name;
-        await user.save();
-
-        const result = this.convertToUser(user);
-
-        this.logger.endOperation(
-          logContext,
-          `User found by email and linked to Google: ${result.email}`,
-          {
-            userId: result.id,
-            email: result.email,
-            googleId,
-            action: 'linked_google',
-          },
-        );
-
-        // Log business metrics
-        this.logger.logMetric(
-          'google_account_linked',
-          {
-            userId: result.id,
-            email: result.email,
-            googleId,
-          },
-          'Google account linked to existing user',
-        );
-
+        userDoc.googleId = googleId;
+        if (!userDoc.name) userDoc.name = name; // Only set name if it wasn't set
+        await userDoc.save();
+        const result = this.convertToUser(userDoc);
+        this.logger.endOperation(logContext, `User found by email and linked: ${result.email}`, { userId: result.id, action: 'linked_google' });
+        this.logger.logMetric('google_account_linked', { userId: result.id, email: result.email });
         return result;
       }
 
-      // 3. If not found by email either, create a new user
       this.logger.info(
-        {
-          operation: 'UserService.findOrCreateUserByGoogleProfile',
-          step: 'creating_new_user',
-          email,
-          googleId,
-          name,
-        },
-        'User not found by email or Google ID, creating new user',
+        { operation: 'UserService.findOrCreateUserByGoogleProfile', step: 'creating_new_user', email, googleId },
+        'Creating new user with Google profile',
       );
-
-      user = await this.userModel.create({
+      userDoc = await this.userModel.create({
         email,
         googleId,
         name,
-        role: 'viewer', // Default role for new users
-        // Add other default fields if necessary
+        role: 'viewer', // Default role
       });
-
-      const result = this.convertToUser(user);
-
-      this.logger.endOperation(logContext, `New user created: ${result.email}`, {
-        userId: result.id,
-        email: result.email,
-        googleId,
-        role: result.role,
-        action: 'created_new',
-      });
-
-      // Log business metrics
-      this.logger.logMetric(
-        'user_created_via_google',
-        {
-          userId: result.id,
-          email: result.email,
-          googleId,
-          role: result.role,
-        },
-        'New user created via Google OAuth',
-      );
-
+      const result = this.convertToUser(userDoc);
+      this.logger.endOperation(logContext, `New user created via Google: ${result.email}`, { userId: result.id, action: 'created_new' });
+      this.logger.logMetric('user_created_via_google', { userId: result.id, email: result.email, role: result.role });
       return result;
-    } catch (error) {
-      this.logger.errorOperation(
-        logContext,
-        error,
-        'Error finding or creating user by Google profile',
-        {
-          googleId: profile.sub || profile.id,
-          email: profile.email,
-        },
-      );
 
-      // If it's already one of our custom errors, rethrow it
-      if (error instanceof ValidationError) {
+    } catch (error) {
+      this.logger.errorOperation(logContext, error, 'Error in findOrCreateUserByGoogleProfile', { googleId: profile.sub || profile.id, email: profile.email });
+      if (error instanceof ValidationError || error instanceof DatabaseError) {
         throw error;
       }
-
-      // Map other errors to appropriate types
-      if (error instanceof Error) {
-        throw new DatabaseError(
-          `Error creating or finding user: ${error.message}`,
-          'USER_DB_ERROR',
-        );
-      }
-
       throw new DatabaseError(
-        'Unknown error occurred while processing user data',
-        'USER_UNKNOWN_ERROR',
+        `Error processing Google profile: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'GOOGLE_PROFILE_PROCESSING_ERROR',
       );
     }
   }
 
   /**
-   * Finds a user by their ID
-   * @param id - The user's ID
-   * @returns The user or null if not found
-   */
-  async findUserById(id: string): Promise<User | null> {
-    const logContext = this.logger.startOperation('UserService.findUserById', {
-      userId: id,
-    });
-
-    try {
-      this.logger.info(
-        {
-          operation: 'UserService.findUserById',
-          step: 'database_lookup',
-          userId: id,
-        },
-        'Looking up user by ID in database',
-      );
-
-      const user = await this.userModel.findById(id);
-
-      if (!user) {
-        this.logger.warn(
-          {
-            operation: 'UserService.findUserById',
-            userId: id,
-            found: false,
-          },
-          `User not found: ${id}`,
-        );
-
-        this.logger.endOperation(logContext, `User not found: ${id}`, { userId: id, found: false });
-
-        return null;
-      }
-
-      const result = this.convertToUser(user);
-
-      this.logger.endOperation(logContext, `User found: ${result.email}`, {
-        userId: result.id,
-        email: result.email,
-        role: result.role,
-        found: true,
-      });
-
-      return result;
-    } catch (error) {
-      this.logger.errorOperation(logContext, error, 'Error finding user by ID', { userId: id });
-
-      throw new DatabaseError(
-        `Error finding user: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'USER_LOOKUP_ERROR',
-      );
-    }
-  }
-
-  /**
-   * Converts a Mongoose user document to a plain User object
-   * @param userDoc - The Mongoose user document
-   * @returns A plain User object
+   * Converts a Mongoose user document to a plain User object.
+   * Ensures all fields expected by the User type are present.
+   * @param userDoc - The Mongoose user document.
+   * @returns A plain User object.
    */
   private convertToUser(userDoc: UserDocument): User {
-    const user = userDoc.toObject();
+    const userObject = userDoc.toObject({ virtuals: true }); // Ensure virtuals like id are included if defined in schema
     return {
-      id: user._id.toString(),
-      email: user.email,
-      name: user.name,
-      googleId: user.googleId,
-      role: user.role,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
+      id: userObject._id.toString(), // Mongoose typically uses _id
+      email: userObject.email,
+      name: userObject.name || null, // Ensure name is null if not present, not undefined
+      googleId: userObject.googleId || null,
+      role: userObject.role || 'viewer', // Default role if not set
+      password: userObject.password || null, // Include password if it exists on the model, though it's often excluded
+      createdAt: userObject.createdAt,
+      updatedAt: userObject.updatedAt,
     };
   }
 }
